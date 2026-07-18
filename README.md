@@ -1,5 +1,5 @@
 DotNetRAW
-==========
+=========
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/macmade/DotNetRAW/ci-win.yaml?label=Windows&logo=dotnet)](https://github.com/macmade/DotNetRAW/actions/workflows/ci-win.yaml)
 [![Issues](http://img.shields.io/github/issues/macmade/DotNetRAW.svg?logo=github)](https://github.com/macmade/DotNetRAW/issues)
