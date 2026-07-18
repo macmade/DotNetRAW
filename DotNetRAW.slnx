@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="DotNetRAW/DotNetRAW.csproj" />
+  <Project Path="DotNetRAWTests/DotNetRAWTests.csproj" />
+</Solution>
