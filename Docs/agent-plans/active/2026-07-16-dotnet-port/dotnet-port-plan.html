@@ -1,0 +1,739 @@
+<meta charset="utf-8">
+<title>Port SwiftRAW to C# / .NET 10 — Implementation Plan</title>
+<style>
+    :root {
+        --bg:        #0f1419;
+        --bg-alt:    #161b22;
+        --bg-card:   #1b2129;
+        --border:    #2c333d;
+        --text:      #d6dde6;
+        --text-dim:  #9aa6b2;
+        --heading:   #e8eef5;
+        --accent:    #6cb6ff;
+        --accent-2:  #b392f0;
+        --code-bg:   #0b0f14;
+        --code-text: #cdd9e5;
+        --green:     #2ea043;
+        --green-bg:  #12321c;
+        --green-tx:  #6fdd8b;
+        --amber:     #b0810f;
+        --amber-bg:  #362a06;
+        --amber-tx:  #e3b341;
+        --gray:      #444c56;
+        --gray-bg:   #21262d;
+        --gray-tx:   #adbac7;
+    }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body {
+        margin: 0;
+        padding: 0 0 6rem;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        line-height: 1.6;
+        font-size: 16px;
+    }
+    .wrap { max-width: 960px; margin: 0 auto; padding: 0 1.5rem; }
+    header.page {
+        background: linear-gradient(135deg, #14324f 0%, #1b2129 60%);
+        border-bottom: 1px solid var(--border);
+        padding: 2.6rem 0 2rem;
+        margin-bottom: 2rem;
+    }
+    header.page h1 { margin: 0 0 .6rem; font-size: 1.9rem; color: var(--heading); letter-spacing: .2px; }
+    .meta { color: var(--text-dim); font-size: .92rem; }
+    .meta code { color: var(--accent); }
+    h2 { color: var(--heading); font-size: 1.35rem; margin: 2.6rem 0 1rem; padding-bottom: .4rem; border-bottom: 1px solid var(--border); }
+    h3 { color: var(--heading); font-size: 1.08rem; margin: 1.6rem 0 .6rem; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    p { margin: .7rem 0; }
+    code { background: var(--code-bg); color: var(--code-text); padding: .12em .4em; border-radius: 4px; font-family: "SF Mono", SFMono-Regular, Menlo, Consolas, monospace; font-size: .86em; }
+    pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; overflow-x: auto; }
+    pre code { background: none; padding: 0; font-size: .82rem; line-height: 1.5; }
+    ul, ol { margin: .6rem 0; padding-left: 1.4rem; }
+    li { margin: .3rem 0; }
+    strong { color: var(--heading); }
+    .status { display: inline-block; padding: .16em .7em; border-radius: 999px; font-size: .74rem; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; vertical-align: middle; white-space: nowrap; }
+    .status.not-started { background: var(--gray-bg);  color: var(--gray-tx);  border: 1px solid var(--gray); }
+    .status.in-progress { background: var(--amber-bg); color: var(--amber-tx); border: 1px solid var(--amber); }
+    .status.completed   { background: var(--green-bg); color: var(--green-tx); border: 1px solid var(--green); }
+    .callout { background: var(--bg-alt); border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 6px; padding: .8rem 1rem; margin: 1rem 0; }
+    .callout.warn { border-left-color: var(--amber); }
+    .callout.risk { border-left-color: #e5534b; }
+    table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: .9rem; display: block; overflow-x: auto; }
+    th, td { border: 1px solid var(--border); padding: .5rem .7rem; text-align: left; vertical-align: top; }
+    th { background: var(--bg-alt); color: var(--heading); }
+    td code { white-space: nowrap; }
+    /* Table of contents */
+    .toc { background: var(--bg-alt); border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.2rem; }
+    .toc .phase { margin: .9rem 0 .3rem; color: var(--accent-2); font-weight: 600; font-size: .95rem; }
+    .toc ol { list-style: none; padding-left: 0; margin: .2rem 0; }
+    .toc li { display: flex; align-items: center; gap: .6rem; padding: .18rem 0; }
+    .toc li .id { color: var(--text-dim); font-variant-numeric: tabular-nums; min-width: 2.4rem; }
+    .toc li a { flex: 1; }
+    /* Milestone cards */
+    .milestone { background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem 1.4rem; margin: 1.2rem 0; }
+    .milestone > .head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+    .milestone h3 { margin: 0; }
+    .milestone .field { margin: .8rem 0 .2rem; color: var(--accent-2); font-weight: 600; font-size: .82rem; text-transform: uppercase; letter-spacing: .4px; }
+    .milestone .placeholder { color: var(--text-dim); font-style: italic; }
+    .phase-banner { margin: 2.4rem 0 .4rem; color: var(--accent-2); font-size: 1rem; font-weight: 700; letter-spacing: .5px; text-transform: uppercase; }
+    .task-list { list-style: none; padding-left: 0; }
+    .task-list li { padding-left: 1.7rem; position: relative; }
+    .task-list li::before { content: "☐"; position: absolute; left: 0; color: var(--text-dim); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 1rem 0; }
+    .small { font-size: .85rem; color: var(--text-dim); }
+</style>
+
+<header class="page">
+    <div class="wrap">
+        <h1>Port SwiftRAW to C# / .NET 10 — Implementation Plan</h1>
+        <div class="meta">
+            <div><strong>Generated:</strong> 2026-07-18</div>
+            <div><strong>Source:</strong> <code>Docs/agent-plans/active/2026-07-16-dotnet-port/dotnet-port.md</code></div>
+        </div>
+    </div>
+</header>
+
+<div class="wrap">
+
+<h2 id="overview">Overview</h2>
+<p>
+    <strong>SwiftRAW</strong> is a deliberately read-only Swift wrapper over
+    <strong>LibRAW</strong>: it opens a RAW file, unpacks the sensor data, and surfaces the image
+    geometry, colour calibration, lens identity, and shooting metadata plus the raw 16-bit Bayer
+    buffer. It does <em>not</em> demosaic, decode thumbnails, or write. This plan ports that library
+    to idiomatic C# targeting <strong>.NET 10</strong>, preserving the public API shape, type names,
+    responsibilities, and observable behaviour, while adopting established .NET conventions.
+</p>
+<p>
+    The single largest difference from the original is the native binding. SwiftRAW reaches LibRAW
+    through <strong>Swift/C++ interop</strong> plus a small C++ shim (<code>SwiftRAWLibRaw.h</code>) —
+    a mechanism .NET has no equivalent for. As the source document directs, the port instead binds
+    LibRAW's <strong>flat C API</strong> (<code>libraw_init</code>, <code>libraw_open_file</code>,
+    <code>libraw_open_buffer</code>, <code>libraw_unpack</code>, <code>libraw_recycle</code>,
+    <code>libraw_close</code>, <code>libraw_strerror</code>, <code>libraw_version</code>,
+    <code>libraw_get_iparams/lensinfo/imgother</code>, …) via P/Invoke (<code>DllImport</code> +
+    marshaling) against the bundled native library. This makes the native interop layer a new,
+    high-risk, <em>early</em> milestone that has no counterpart in the sibling
+    <strong>DotNetFITS</strong> port (which is pure-managed).
+</p>
+<p>
+    The approach mirrors DotNetFITS's proven shape: <strong>dependency-ordered, incremental
+    milestones</strong>, each porting one layer with its tests (TDD), each leaving the solution
+    compiling with all tests green so it can be reviewed and committed on its own. Conventions,
+    formatting, the single-exception error model, culture-invariance rules, test infrastructure, and
+    the "describe the library on its own terms" framing are all carried over from DotNetFITS.
+</p>
+
+<h2 id="qa">Questions &amp; answers</h2>
+
+<h3>1. The bundled <code>libraw.dll</code> is Windows-only — how should native tests run across platforms?</h3>
+<p>
+    <strong>Answer: ship a macOS <code>.dylib</code>.</strong> A macOS dynamic library will be produced
+    from SwiftRAW's static LibRAW archive and committed alongside the Windows DLL, so the LibRAW-calling
+    tests run on both the development Mac and Windows CI. The maintainer will update SwiftRAW's macOS
+    LibRAW build to <strong>0.22.2</strong> so the macOS <code>.dylib</code> matches the bundled Windows
+    DLL version exactly — keeping the version-string/number tests uniform across platforms rather than
+    OS-dependent.
+</p>
+
+<h3>2. Swift's <code>RAWFile</code> frees its native context deterministically in <code>deinit</code> — how should the port manage native lifetime?</h3>
+<p>
+    <strong>Answer: <code>IDisposable</code> + <code>SafeHandle</code>.</strong> A
+    <code>LibRawHandle : SafeHandle</code> owns the native <code>libraw_data_t*</code> and calls
+    <code>libraw_recycle</code> + <code>libraw_close</code> in <code>ReleaseHandle</code>.
+    <code>RAWFile</code> implements <code>IDisposable</code> (deterministic release with a finalizer
+    safety net) and, for the <code>Data</code>/byte-buffer path, pins and owns the input buffer for the
+    file's whole lifetime (LibRAW's <code>open_buffer</code> retains the caller's pointer). As an
+    idiomatic C# addition Swift lacks, <code>RAWFile</code> throws
+    <code>ObjectDisposedException</code> once disposed.
+</p>
+
+<h3>3. How should the ~14 immutable metadata value types be represented?</h3>
+<p>
+    <strong>Answer: <code>sealed record</code> classes.</strong> These are per-file, low-cardinality
+    aggregates (materialised a handful of times per opened file, not in bulk), and several already hold
+    heap-allocated arrays/strings — so the <code>readonly struct</code> allocation argument that justified
+    <code>FITSValue</code> in DotNetFITS does <em>not</em> apply here (a struct would remove at most one
+    small header object while the real allocations remain, and several of these types are large enough
+    that value-copy costs outweigh it). <code>sealed record</code> gives immutability, value equality, and
+    a clean <code>ToString()</code> override. Because record equality compares array fields by reference,
+    the two array/matrix-bearing types (<code>RAWColorData</code>, <code>RAWCFAPattern</code>) get custom
+    structural <code>Equals</code>/<code>GetHashCode</code> to preserve Swift's deep <code>Equatable</code>.
+    <code>RAWParsingOptions</code> (a single <code>Bool</code> in Swift) is a natural
+    <code>readonly record struct</code>; the nested <code>Kind</code>/<code>Layout</code>/<code>FocalType</code>
+    are plain <code>enum</code>s.
+</p>
+
+<h2 id="notes">Notes</h2>
+
+<h3>Conventions (carried over from DotNetFITS)</h3>
+<ul>
+    <li><strong>Namespaces are flat</strong> — <code>namespace DotNetRAW;</code> and
+        <code>namespace DotNetRAWTests;</code> (file-scoped). Subfolders are organisational only and do
+        <em>not</em> become namespace segments, so the public API stays recognisable to SwiftRAW users.</li>
+    <li><strong>One public type per file</strong>, grouped into subfolders that mirror SwiftRAW's own
+        layout: <code>Interop/</code> (new — the native layer), <code>Core/</code>, <code>Image/</code>,
+        <code>Color/</code>, <code>Lens/</code>, <code>Metadata/</code>, <code>Extensions/</code>. Test
+        folders mirror the library folders.</li>
+    <li><strong>.NET naming, SwiftRAW formatting.</strong> PascalCase members, <code>I</code>-prefixed
+        interfaces — but keep SwiftRAW's house formatting: <strong>Allman braces</strong>,
+        <strong>spaces inside parentheses/brackets/generics and attributes</strong>
+        (<code>[ Fact ]</code>, <code>new byte[ 32 ]</code>, <code>IReadOnlyList&lt; int &gt;</code>,
+        <code>$"… { value } …"</code>), <strong>aligned <code>=</code></strong> across consecutive
+        assignments and tabular-aligned columns, empty bodies as <code>{}</code>. These are applied by
+        hand (not analyzer-gated).</li>
+    <li><strong>XML doc comments on every type and member — including <code>internal</code> and
+        <code>private</code> ones.</strong> <code>GenerateDocumentationFile=true</code> gates public
+        members via <code>CS1591</code>; <code>TreatWarningsAsErrors=true</code>.</li>
+    <li><strong>Describe the library on its own terms.</strong> Code, doc-comments, and README must not
+        reference the Swift original, Foundation, or Swift idioms (a LibRAW <em>dependency</em> note in
+        the README is fine — LibRAW is a real runtime dependency here, unlike FITS).</li>
+    <li><strong>Prefer get/set (init-only) properties over plain fields</strong>, even private ones —
+        <code>record</code> positional/explicit properties satisfy this.</li>
+    <li><strong>MIT license header block</strong> atop every source file (the maintainer's standard block).</li>
+</ul>
+
+<h3>Interop strategy &amp; the layout risk</h3>
+<p>
+    The port binds LibRAW's flat C API. SwiftRAW reads eleven nested LibRAW structs. Three of them are
+    reachable through dedicated C getters that return interior pointers —
+    <code>libraw_get_iparams</code> (<code>idata</code>), <code>libraw_get_lensinfo</code>
+    (<code>lens</code>), <code>libraw_get_imgother</code> (<code>other</code>) — so no offset maths is
+    needed for those. The remainder (<code>sizes</code>, <code>color</code>, <code>shootinginfo</code>,
+    <code>makernotes.common</code>, <code>rawdata</code>) have <em>no</em> getters and must be read from
+    the <code>libraw_data_t</code> base pointer at their correct offsets. Most of these sit
+    <em>after</em> the very large <code>makernotes</code>/<code>params</code>/<code>rawparams</code>
+    sub-structs.
+</p>
+<div class="callout risk">
+    <strong>#1 risk — byte-exact struct layout.</strong> <code>libraw_data_t</code> is &gt;150&nbsp;KB and
+    contains huge inline arrays (<code>ushort curve[65536]</code>, two <code>unsigned cblack[4104]</code>).
+    To reach <code>color</code>/<code>shootinginfo</code>/<code>makernotes.common</code>/<code>rawdata</code>
+    the preceding sub-structs must be sized <em>exactly</em>. Recommended approach: model the sub-structs
+    SwiftRAW actually reads field-by-field, and model every intervening sub-struct as a correctly-sized
+    opaque byte block (<code>[MarshalAs(UnmanagedType.ByValArray, SizeConst=N)]</code>), then
+    <code>Marshal.PtrToStructure</code> the whole <code>libraw_data_t</code> once per file. Validate all
+    offsets/sizes with <code>Marshal.SizeOf</code>/<code>Marshal.OffsetOf</code> against expected values
+    (cross-check on Windows, where the DLL matches the vendored headers). Use natural packing —
+    <strong>do not</strong> force <code>Pack=1</code>. This is the single most error-prone milestone (M2).
+</div>
+
+<h3>Marshaling &amp; porting hazards</h3>
+<ul>
+    <li><strong>No C++ interop / no shim.</strong> The C++ <code>LibRaw</code> methods SwiftRAW calls map
+        1:1 to the flat C functions (<code>open_file</code>→<code>libraw_open_file</code>, etc.). The
+        shim's <code>cblack</code> accessor becomes a direct read of the first four
+        <code>cblack[]</code> values from the marshaled <code>color</code>.</li>
+    <li><strong>Fixed C <code>char[N]</code> buffers</strong> (make/model/software/serials/desc/…) →
+        <code>[MarshalAs(ByValArray, SizeConst=N)] byte[]</code>, decoded UTF-8 up to the first NUL (the
+        port's equivalent of Swift's <code>String(cCharArray:)</code>). Distinguish these from the few
+        genuine pointers (<code>xmpdata</code>, <code>thumb</code>, <code>profile</code>).</li>
+    <li><strong>2-D C arrays</strong> (<code>rgb_cam[3][4]</code>, <code>cam_xyz[4][3]</code>,
+        <code>cmatrix[3][4]</code>, <code>xtrans[6][6]</code>, GPS <code>latitude[3]</code>, …) are flat
+        row-major buffers — reshape to <code>T[][]</code> via the ported <code>CFixedArray</code> helper.</li>
+    <li><strong><code>ushort</code>/<code>unsigned</code> signedness</strong>: sensor dimensions, pitch,
+        black levels, filters, and the Bayer buffer are unsigned — use <code>ushort</code>/<code>uint</code>.</li>
+    <li><strong><code>time_t timestamp</code> is 64-bit</strong> on both the Windows x64 and macOS builds —
+        marshal as <code>long</code>; <code>0</code> → <code>null</code> timestamp.</li>
+    <li><strong>Raw buffer length</strong> = <code>raw_height × (raw_pitch / 2)</code> samples; return
+        <code>null</code> when <code>raw_image</code> is null or pitch/height ≤ 0 (mirrors SwiftRAW).</li>
+    <li><strong>Culture-invariance.</strong> SwiftRAW does no explicit locale work but relies on Swift's
+        locale-independent interpolation. C# <code>ToString()</code> is culture-sensitive, so every numeric
+        rendering in a description must use <code>CultureInfo.InvariantCulture</code>. Add a repo-root
+        <code>.editorconfig</code> raising the globalization analyzers (<code>CA1305</code>,
+        <code>CA1304</code>, <code>CA1310</code>, <code>CA1309</code>, …) to errors, and a culture-swap test
+        (run under <code>fr-FR</code>) wherever a float/double is formatted. Preserve the exact Unicode
+        characters in descriptions: <code>×</code> (U+00D7), <code>–</code> (en dash), <code>—</code> (em dash).</li>
+    <li><strong>Reciprocal shutter formatting</strong>: <code>denominator = round(1/shutter)</code>, guarded
+        by <code>isFinite &amp;&amp; &lt; 1e9</code>, rendered <code>"1/{n}s"</code>; tolerate
+        <code>Infinity</code>/<code>NaN</code> exposure values.</li>
+    <li><strong>No deterministic <code>deinit</code></strong> → <code>IDisposable</code> + finalizer +
+        <code>SafeHandle</code> (see Q&amp;A #2).</li>
+    <li><strong><code>init?</code> failable</strong> (<code>RAWGPSInfo</code> when <code>gpsparsed==0</code>)
+        → a nullable static factory returning <code>RAWGPSInfo?</code>.</li>
+</ul>
+
+<h3>Native library packaging</h3>
+<ul>
+    <li>Commit the natives under a per-RID layout — <code>runtimes/win-x64/native/libraw.dll</code>
+        (per-architecture, Windows) and <code>runtimes/osx/native/libraw.dylib</code> (a single
+        <strong>universal</strong> arm64 + x86_64 dylib under the generic <code>osx</code> RID, covering both
+        Apple Silicon and Intel Macs) — and ensure the correct one is copied next to the test assembly and
+        loaded at runtime. A <code>NativeLibrary.SetDllImportResolver</code> mapping the import name
+        <code>"libraw"</code> to the per-RID file is the robust option if default probing is insufficient.</li>
+    <li><code>DllImport</code> uses library name <code>"libraw"</code> with
+        <code>CallingConvention.Cdecl</code>; ANSI/UTF-8 for the <code>const char*</code> file-path and
+        error-string entry points. (<code>[LibraryImport]</code> source-generated marshaling is the modern
+        .NET 10 alternative and may be used where the signatures are blittable; the source document names
+        <code>DllImport</code>.)</li>
+    <li>The class library likely needs <code>&lt;AllowUnsafeBlocks&gt;true&lt;/AllowUnsafeBlocks&gt;</code>
+        for pointer/span work; the existing <code>InternalsVisibleTo</code>,
+        <code>GenerateDocumentationFile</code>, <code>CheckForOverflowUnderflow</code>, and
+        <code>TreatWarningsAsErrors</code> settings are kept.</li>
+</ul>
+
+<h3>LibRAW version</h3>
+<p>
+    The bundled binaries are LibRAW <strong>0.22.2</strong> (numeric <code>0x1602</code> = <strong>5634</strong>).
+    SwiftRAW's tests assert <code>"0.22.1-Release"</code>; the port's version tests must therefore expect
+    <strong><code>"0.22.2-Release"</code></strong> and <code>5634</code>. Both platforms will report 0.22.2
+    (the macOS <code>.dylib</code> is being rebuilt to match), so the assertion is platform-uniform.
+</p>
+
+<h3>Test-framework mapping (swift-testing → xUnit v3)</h3>
+<table>
+    <tr><th>swift-testing</th><th>xUnit v3 (Microsoft.Testing.Platform)</th></tr>
+    <tr><td><code>@Test func</code></td><td><code>[ Fact ] public void</code> (synchronous)</td></tr>
+    <tr><td><code>@Test(arguments: rawFileURLs)</code></td><td><code>[ Theory ]</code> + a fixture <code>MemberData</code> source over <code>Test Files/</code></td></tr>
+    <tr><td><code>#expect(a == b)</code></td><td><code>Assert.Equal( b, a )</code></td></tr>
+    <tr><td><code>#expect(cond)</code></td><td><code>Assert.True( cond )</code></td></tr>
+    <tr><td><code>try #require(opt)</code></td><td><code>Assert.NotNull( opt )</code> then use (also narrows nullability)</td></tr>
+    <tr><td><code>#expect(throws: RAWError.self){ }</code></td><td><code>Assert.Throws&lt; RAWException &gt;( () =&gt; … )</code></td></tr>
+    <tr><td><code>@testable import SwiftRAW</code></td><td><code>InternalsVisibleTo</code></td></tr>
+</table>
+<p class="small">
+    Fixtures live in the repo-root <code>Test Files/</code> directory (currently one 33&nbsp;MB
+    <code>0H8A0311.CR3</code>), outside any project, not copied to build output; discovered via a
+    <code>[CallerFilePath]</code> resolver walking up to the repo root and filtering the 24 known RAW
+    extensions — exactly the DotNetFITS pattern. Fixture-parameterised tests simply yield no cases when the
+    directory is empty.
+</p>
+
+<h3>Key-components mapping</h3>
+<table>
+    <tr><th>SwiftRAW (Swift)</th><th>DotNetRAW (C#)</th><th>Notes</th></tr>
+    <tr><td>C++ <code>LibRaw</code> + <code>SwiftRAWLibRaw.h</code> shim</td><td><code>Interop/</code> P/Invoke layer + <code>LibRawHandle : SafeHandle</code></td><td>flat C API, no C++/shim</td></tr>
+    <tr><td><code>RAWError</code> (enum)</td><td><code>RAWException</code> + <code>RAWErrorKind</code></td><td>single exception + kind + static factories, <code>"RAW Error: "</code> prefix</td></tr>
+    <tr><td><code>RAWParsingOptions</code> (struct)</td><td><code>RAWParsingOptions</code> (<code>readonly record struct</code>)</td><td><code>Default</code>, <code>UnpacksImmediately</code></td></tr>
+    <tr><td><code>LibRAWVersion</code> (case-less enum)</td><td><code>LibRAWVersion</code> (static class)</td><td><code>String</code>/<code>Number</code>/context smoke</td></tr>
+    <tr><td><code>RAWFile</code> (final class)</td><td><code>RAWFile</code> (sealed class, <code>IDisposable</code>)</td><td>open/unpack/accessors/raw buffer/description/dispose</td></tr>
+    <tr><td><code>RAWImageSizes</code>, <code>RAWImageInfo</code>, <code>RAWCFAPattern</code>+<code>Kind</code>, <code>RAWSensorData</code>+<code>Layout</code></td><td>sealed records (+ enums)</td><td>exact Bayer/X-Trans lookup preserved</td></tr>
+    <tr><td><code>RAWColorData</code></td><td>sealed record (custom equality)</td><td>matrices 3×4/4×3/3×4, <code>cblack[0..4]</code></td></tr>
+    <tr><td><code>RAWLensInfo</code>, <code>RAWDNGLensInfo</code>, <code>RAWMakerNoteLensInfo</code>+<code>FocalType</code></td><td>sealed records (+ enum)</td><td>composition preserved</td></tr>
+    <tr><td><code>RAWShotInfo</code>, <code>RAWGPSInfo</code>, <code>RAWCameraMetadata</code></td><td>sealed records</td><td>timestamp, DMS→decimal, reciprocal shutter</td></tr>
+    <tr><td><code>CFixedArray</code>, <code>String(cCharArray:)</code>, <code>compactDescription</code></td><td><code>Extensions/</code> helpers (internal)</td><td>fixed-array reads, UTF-8-to-NUL, invariant compact float</td></tr>
+</table>
+
+<h2 id="toc">Table of contents</h2>
+<div class="toc">
+    <div class="phase">Phase 1 · Foundations &amp; native interop</div>
+    <ol>
+        <li><span class="id">M1</span><a href="#m1">Project bootstrap, conventions &amp; native library wiring</a><span class="status completed">Completed</span></li>
+        <li><span class="id">M2</span><a href="#m2">Native interop foundation — P/Invoke, marshaling &amp; SafeHandle</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M3</span><a href="#m3">Low-level helpers &amp; test infrastructure</a><span class="status not-started">Not started</span></li>
+    </ol>
+    <div class="phase">Phase 2 · Core types</div>
+    <ol>
+        <li><span class="id">M4</span><a href="#m4">Errors, options &amp; version</a><span class="status not-started">Not started</span></li>
+    </ol>
+    <div class="phase">Phase 3 · Metadata value layer (bottom-up)</div>
+    <ol>
+        <li><span class="id">M5</span><a href="#m5">Image geometry &amp; identity</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M6</span><a href="#m6">CFA pattern &amp; sensor data</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M7</span><a href="#m7">Colour data</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M8</span><a href="#m8">Lens info</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M9</span><a href="#m9">Shot, GPS &amp; camera metadata</a><span class="status not-started">Not started</span></li>
+    </ol>
+    <div class="phase">Phase 4 · File orchestration</div>
+    <ol>
+        <li><span class="id">M10</span><a href="#m10">RAWFile — open, unpack, accessors &amp; disposal</a><span class="status not-started">Not started</span></li>
+    </ol>
+    <div class="phase">Phase 5 · Integration &amp; finalization</div>
+    <ol>
+        <li><span class="id">M11</span><a href="#m11">Integration tests &amp; sample-file parity</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M12</span><a href="#m12">Finalization — clean build, README, CI parity</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M13</span><a href="#m13">NuGet package — bundle native binaries for all supported RIDs</a><span class="status not-started">Not started</span></li>
+    </ol>
+</div>
+
+<h2>Milestones</h2>
+
+<div class="phase-banner">Phase 1 · Foundations &amp; native interop</div>
+
+<div class="milestone" id="m1">
+    <div class="head"><h3>M1 — Project bootstrap, conventions &amp; native library wiring</h3><span class="status completed">Completed</span></div>
+    <div class="field">Goal</div>
+    <p>Establish the source-tree layout, house conventions, and the native-library plumbing so both the
+    Windows DLL and the macOS <code>.dylib</code> load and the xUnit harness runs green on both platforms —
+    the foundation every later milestone builds on.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li>Confirm the existing scaffolding builds and tests run: <code>dotnet build DotNetRAW.slnx</code> and <code>dotnet test</code> (Debug + Release), with a trivial passing test.</li>
+        <li>Create the library subfolders mirroring SwiftRAW: <code>Interop/</code>, <code>Core/</code>, <code>Image/</code>, <code>Color/</code>, <code>Lens/</code>, <code>Metadata/</code>, <code>Extensions/</code>; mirror them under the test project.</li>
+        <li>Add the MIT license header snippet and document the house formatting conventions (Allman, spaced brackets/generics/attributes, aligned <code>=</code>) for use in every file.</li>
+        <li>Add a repo-root <code>.editorconfig</code> raising the globalization analyzers (<code>CA1305</code>, <code>CA1304</code>, <code>CA1310</code>, <code>CA1309</code>, <code>CA1311</code>) to build errors.</li>
+        <li>Add <code>&lt;AllowUnsafeBlocks&gt;true&lt;/AllowUnsafeBlocks&gt;</code> to the library csproj (for pointer/span interop); keep <code>InternalsVisibleTo</code>, <code>GenerateDocumentationFile</code>, <code>CheckForOverflowUnderflow</code>, <code>TreatWarningsAsErrors</code>.</li>
+        <li>Lay out the native binaries per RID: <code>runtimes/win-x64/native/libraw.dll</code> and <code>runtimes/osx-arm64/native/libraw.dylib</code> (both 0.22.2); wire MSBuild so the matching native is copied next to the test assembly.</li>
+        <li>Add a smoke test that P/Invokes <code>libraw_version()</code> and asserts <code>"0.22.2-Release"</code>, proving the native library loads on the running OS (validates the packaging end-to-end before M2's real work).</li>
+        <li>Update <code>ci-win.yaml</code> only if the native packaging needs it (the DLL must sit beside the test binary on Windows CI).</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Verified with a native smoke test written and run to prove the plumbing end to end. The solution builds warning-free and the smoke test passes in <strong>both Debug and Release</strong> on macOS (osx-arm64); the Windows path was validated by cross-configuring the RID.</p>
+    <ul>
+        <li><strong>Native macOS binary.</strong> Built <code>runtimes/osx/native/libraw.dylib</code> as a <strong>universal (arm64 + x86_64)</strong> binary from SwiftRAW's LibRaw <strong>0.22.2</strong> universal static archive (<code>../SwiftRAW/LibRAW/lib/libraw.a</code>) via <code>clang++ -dynamiclib -arch arm64 -arch x86_64 -mmacosx-version-min=15.0 -Wl,-force_load,… -lz</code>. Both slices export the flat C symbols and depend only on system libraries (<code>libz</code>, <code>libc++</code>, <code>libSystem</code>); the arm64 slice — verified through <code>dlopen</code> — reports <code>"0.22.2-Release"</code> / <code>5634</code>, matching the Windows DLL exactly. One universal dylib covers both Apple Silicon and Intel Macs, so no separate <code>osx-x64</code> binary is needed (per review).</li>
+        <li><strong>Native layout.</strong> <code>runtimes/win-x64/native/libraw.dll</code> (per-architecture, Windows) and <code>runtimes/osx/native/libraw.dylib</code> (one universal binary for all Macs, under the generic <code>osx</code> RID). Per review, the Windows DLL was <strong>moved</strong> out of <code>LibRAW/lib/</code> (rather than duplicated) — git records it as a rename; <code>LibRAW/</code> keeps the headers (needed for M2) and the Windows import/static libs (<code>libraw.lib</code>, <code>libraw.exp</code>, <code>libraw_static.lib</code>). The universal dylib gives full macOS coverage from M1; only its x86_64 slice is build-verified rather than runtime-tested (this host is Apple Silicon).</li>
+        <li><strong>MSBuild wiring.</strong> <code>DotNetRAW.csproj</code> selects the host RID (<code>RuntimeIdentifier</code> → <code>NETCoreSdkPortableRuntimeIdentifier</code>), maps every <code>osx-*</code> RID to the generic <code>osx</code> folder (the universal dylib), and copies <code>runtimes/&lt;rid&gt;/native/libraw.*</code> flat to the output. The item flows transitively so the native lands next to the <em>test</em> assembly (confirmed under <code>DotNetRAWTests/bin/&lt;config&gt;/net10.0/</code>), where <code>DllImport("libraw")</code> resolves it from the application base directory. Verified: <code>osx-arm64</code>/<code>osx-x64</code> both resolve the universal dylib and <code>win-x64</code> resolves the DLL. Per review, a <code>_WarnMissingLibRawNative</code> target emits a build warning when no native is bundled for the host RID — silent on supported RIDs, and on an unsupported RID (e.g. <code>linux-x64</code>) it warns without being promoted to an error under <code>TreatWarningsAsErrors</code>.</li>
+        <li><strong>Conventions.</strong> Added a repo-root <code>.editorconfig</code> raising the five globalization analyzers (<code>CA1305</code>, <code>CA1304</code>, <code>CA1310</code>, <code>CA1309</code>, <code>CA1311</code>) to errors, with a header comment documenting the culture-invariance rule and the house formatting conventions (Allman, spaced brackets/generics/attributes, aligned <code>=</code>). This is where the "document the conventions" task is satisfied — no standalone doc file, matching DotNetFITS. The MIT header tops every new source file.</li>
+        <li><strong>csproj.</strong> Added <code>&lt;AllowUnsafeBlocks&gt;true&lt;/AllowUnsafeBlocks&gt;</code>; kept <code>InternalsVisibleTo</code>, <code>GenerateDocumentationFile</code>, <code>CheckForOverflowUnderflow</code>, <code>TreatWarningsAsErrors</code>.</li>
+        <li><strong>Interop smoke binding.</strong> <code>Interop/LibRaw.cs</code> declares a single <code>internal</code> source-generated <code>[LibraryImport]</code> for <code>libraw_version</code> (C calling convention pinned via <code>[UnmanagedCallConv]</code> → <code>CallConvCdecl</code>) returning <code>IntPtr</code> — <em>not</em> <code>string</code> — so the marshaller never frees LibRAW's statically-owned <code>const char*</code>; the caller decodes it with <code>Marshal.PtrToStringUTF8</code>. Adopted <code>[LibraryImport]</code> per review, superseding the plan's <code>DllImport</code> wording; the class is <code>static partial</code> so the generator can emit the implementation. The full binding surface (structs, <code>SafeHandle</code>, the rest of the C API) is M2.</li>
+        <li><strong>Folders.</strong> Only <code>Interop/</code> was created (it has files). <code>Core/</code>, <code>Image/</code>, <code>Color/</code>, <code>Lens/</code>, <code>Metadata/</code>, <code>Extensions/</code> are established as a convention and will appear with their first files, matching DotNetFITS (which keeps no empty placeholder folders).</li>
+        <li><strong>CI.</strong> <code>ci-win.yaml</code> left unchanged — the copy wiring supplies the DLL beside the Windows test binary automatically. Noted for the whole suite: <code>dotnet test</code> must be run <em>without</em> <code>--nologo</code> in this Microsoft.Testing.Platform harness (the flag reaches the runner and yields "Zero tests ran"); the CI step already omits it.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent, full build/test verification on both configurations and both RID paths). Outcome: <strong>converged — no Critical/High/Medium findings.</strong> The reviewer independently confirmed the interop is correct (<code>IntPtr</code> return, <code>Cdecl</code>, UTF-8 decode, <code>internal</code> + <code>InternalsVisibleTo</code>), the packaging works on win-x64 and osx-arm64, the natives are not git-ignored, and every convention/task check passes with no regression.</p>
+    <ul>
+        <li><strong>csproj encoding churn</strong> — <em>Low</em> — the initial edit had converted the csproj from CRLF+BOM to LF, churning the whole diff and diverging from the sibling ports. <strong>Fixed:</strong> restored CRLF+BOM; the diff now contains only the added lines.</li>
+        <li><strong>Unsupported RID fails silently</strong> — <em>Low</em> — a host with no <code>runtimes/&lt;rid&gt;/native/</code> directory builds cleanly but throws <code>DllNotFoundException</code> at the first P/Invoke. <strong>Deferred:</strong> an optional MSBuild <code>&lt;Warning&gt;</code> (and M2's <code>SetDllImportResolver</code>) could surface it; left for the maintainer to decide.</li>
+        <li><strong>Single-RID artifact</strong> — <em>Info</em> — selection keys off the build/SDK RID, so a build carries only one RID's native. Correct for M1's build-and-test goal; noted for any future NuGet packaging. <strong>Deferred</strong> (no action).</li>
+        <li><strong>DllImport vs. LibraryImport</strong> — <em>Info</em> — <code>[LibraryImport]</code> is the modern source-generated alternative, but the plan specifies <code>DllImport</code>. <strong>Deferred</strong> (intentional; keep <code>DllImport</code>).</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <ol>
+        <li><strong>Add a build-time warning for a missing native.</strong> Approved surfacing the Low finding: emit an MSBuild warning when no <code>runtimes/&lt;rid&gt;/native/</code> directory exists for the host runtime identifier, so an unsupported platform fails loudly at build time instead of with an opaque runtime <code>DllNotFoundException</code>. <em>(Applied.)</em></li>
+        <li><strong>Move the Windows DLL instead of duplicating it.</strong> The DLL should live only under the per-RID layout (<code>runtimes/win-x64/native/libraw.dll</code>); the duplicate under <code>LibRAW/lib/</code> is removed. <em>(Applied — the tracked <code>LibRAW/lib/libraw.dll</code> is deleted so git records the move as a rename; <code>LibRAW/</code> keeps the headers and the Windows import/static libs.)</em></li>
+        <li><strong>Question: what would NuGet packaging require?</strong> Asked what it would take to ship the library as a NuGet package. Answered in discussion — no code change (the current single-RID build wiring is a build/test convenience; a package would instead embed every supported RID's native via pack metadata and rely on NuGet's RID-based native asset resolution).</li>
+        <li><strong>Question: explain the DllImport vs. LibraryImport distinction.</strong> Asked for clarification of finding 4. Answered in discussion (<code>DllImport</code> generates marshalling at run time; <code>[LibraryImport]</code> is a compile-time source generator that is AOT/trim-friendly).</li>
+        <li><strong>Adopt <code>[LibraryImport]</code> over <code>[DllImport]</code>.</strong> Following the explanation, chose the source-generated <code>[LibraryImport]</code> for the interop layer. <em>(Applied to M1's binding; supersedes the plan's "DllImport + marshaling" wording and carries forward to M2's full binding surface.)</em></li>
+        <li><strong>Add NuGet packaging to the plan.</strong> The library may be published as a NuGet package, so the packaging work should live in this plan. <em>(Applied — added as a new milestone, M13, that bundles the native binaries for every supported RID; the full RID set, including <code>osx-x64</code>, is produced there.)</em></li>
+        <li><strong>Question: what does "RID scope" mean?</strong> Asked for a simple explanation of the runtime-identifier scope for the package. Answered in discussion — no code change.</li>
+        <li><strong>Question: osx-x64 now vs. in M13?</strong> Asked for a simple explanation of the timing choice. Answered in discussion — no code change (M1 ships win-x64 + osx-arm64; osx-x64 is produced in M13).</li>
+        <li><strong>Model the NuGet packaging on DotNetFITS.</strong> DotNetFITS ships a NuGet package built from macOS via a <code>Makefile</code>; M13 should follow the same approach — a <code>Makefile</code> that builds and packs the package on macOS — and must spell out the runtime requirements (the per-RID native LibRAW binaries the package has to carry, unlike the pure-managed DotNetFITS). <em>(Applied — M13 updated after inspecting DotNetFITS's packaging.)</em></li>
+        <li><strong>Build a <em>universal</em> macOS dylib, not arm64-only.</strong> SwiftRAW's static archive is already universal (arm64 + x86_64), so the macOS native should be a single <strong>universal</strong> <code>.dylib</code> covering both Apple Silicon and Intel Macs — not two per-arch dylibs. Build it now. <em>(Applied — replaced the arm64-only dylib with a universal one at <code>runtimes/osx/native/libraw.dylib</code>; the build wiring maps every <code>osx-*</code> RID to the generic <code>osx</code> folder. This gives M1 full macOS coverage and removes the need for a separate <code>osx-x64</code> slice in M13, so the earlier osx-x64-timing question is now moot.)</em></li>
+    </ol>
+</div>
+
+<div class="milestone" id="m2">
+    <div class="head"><h3>M2 — Native interop foundation (P/Invoke, marshaling &amp; SafeHandle)</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Build the managed binding to LibRAW's flat C API and the marshalable struct layer the whole library
+    reads from — the highest-risk layer (see the <a href="#notes">layout risk</a>). Everything above it
+    depends on this being byte-exact.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li>Declare the <code>DllImport</code> bindings: <code>libraw_init</code>, <code>libraw_open_file</code>, <code>libraw_open_buffer</code>, <code>libraw_unpack</code>, <code>libraw_recycle</code>, <code>libraw_close</code>, <code>libraw_strerror</code>, <code>libraw_version</code>, <code>libraw_versionNumber</code>, <code>libraw_get_iparams</code>, <code>libraw_get_lensinfo</code>, <code>libraw_get_imgother</code> (<code>CallingConvention.Cdecl</code>, name <code>"libraw"</code>).</li>
+        <li>Optionally add a <code>NativeLibrary.SetDllImportResolver</code> mapping <code>"libraw"</code> to the per-RID native file.</li>
+        <li>Define <code>[StructLayout(Sequential)]</code> structs for the sub-structs actually read, field-by-field: <code>libraw_image_sizes_t</code>, <code>libraw_iparams_t</code>, <code>libraw_imgother_t</code>, <code>libraw_shootinginfo_t</code>, <code>libraw_gps_info_t</code>, <code>libraw_metadata_common_t</code>, <code>libraw_colordata_t</code> (fields used), <code>libraw_lensinfo_t</code>, <code>libraw_makernotes_lens_t</code>, <code>libraw_dnglens_t</code>, <code>libraw_rawdata_t</code>.</li>
+        <li>Define the enclosing <code>libraw_data_t</code>, modelling intervening sub-structs (<code>makernotes</code>, <code>params</code>, <code>rawparams</code>, …) as correctly-sized opaque <code>ByValArray</code> blocks so <code>color</code>/<code>shootinginfo</code>/<code>makernotes.common</code>/<code>rawdata</code> land at exact offsets. Natural packing (no <code>Pack=1</code>).</li>
+        <li>Add validation tests: <code>Marshal.SizeOf</code>/<code>Marshal.OffsetOf</code> assertions against the expected C sizes/offsets (cross-checked on Windows where the DLL matches the vendored headers).</li>
+        <li>Implement <code>LibRawHandle : SafeHandle</code> — <code>ReleaseHandle</code> calls <code>libraw_recycle</code> then <code>libraw_close</code>.</li>
+        <li>Add the status-code constants (<code>LIBRAW_SUCCESS</code>, <code>LIBRAW_FILE_UNSUPPORTED</code>, <code>LIBRAW_UNSUFFICIENT_MEMORY</code>, plus the fuller <code>LibRaw_errors</code> set) and the <code>IsFatal(code) =&gt; code &lt; -100000</code> predicate.</li>
+        <li>Add a native round-trip smoke test: <code>libraw_init(0)</code> → non-null handle → <code>libraw_close</code>; <code>libraw_versionNumber() == 5634</code>.</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="milestone" id="m3">
+    <div class="head"><h3>M3 — Low-level helpers &amp; test infrastructure</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Port the reusable helpers every value type depends on, and stand up the test infrastructure
+    (fixtures, discovery, shared utilities) — all deterministic and cross-platform.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li>Port <code>CFixedArray</code> → an internal static helper with <code>Values</code> (flat) and <code>Matrix</code> (row-major reshape to <code>T[][]</code>) reading fixed C-array fields off the marshaled structs.</li>
+        <li>Port <code>String(cCharArray:)</code> → a helper that decodes a fixed <code>byte[]</code> as UTF-8 up to the first NUL.</li>
+        <li>Port <code>BinaryFloatingPoint.compactDescription</code> → an invariant-culture compact float formatter (whole numbers → integer string, otherwise shortest round-trippable) with a culture-swap test.</li>
+        <li>Add <code>TestError</code> (test-only <code>internal sealed</code> exception) and <code>TestUtilities</code>.</li>
+        <li>Implement fixture discovery in <code>TestUtilities</code>: <code>[CallerFilePath]</code> → walk to repo root → <code>Test Files/</code>, filter the 24 RAW extensions, sorted <code>StringComparer.Ordinal</code>; expose <code>RawFileUrls</code> / <code>HasTestFiles</code>.</li>
+        <li>Add unit tests for the helpers (fixed-array order, matrix reshape 2×3 and 3×4, UTF-8-to-NUL, compact float incl. culture-swap).</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="phase-banner">Phase 2 · Core types</div>
+
+<div class="milestone" id="m4">
+    <div class="head"><h3>M4 — Errors, options &amp; version</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Port the leaf types the file layer throws, is parameterised by, and reports through: the exception
+    model, parsing options, and the LibRAW version surface.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li><code>RAWErrorKind</code> enum mirroring the six <code>RAWError</code> cases (invalid file URL, cannot read file, open failed, unpack failed, unsupported format, LibRAW error).</li>
+        <li><code>RAWException : Exception</code> with a <code>Kind</code> discriminator, private constructor, and static factories per case; every message prefixed <code>"RAW Error: "</code>; carries <code>code</code>/<code>message</code> where the Swift case did. (Public API throwing is a deliberate, documented override of the house "avoid throwing from public methods" convention — the source mandates exception-based errors "as in SwiftRAW".)</li>
+        <li><code>RAWParsingOptions</code> (<code>readonly record struct</code>): <code>UnpacksImmediately</code> (default <code>true</code>), <code>Default</code>, <code>ToString()</code> → <code>"eager unpack"</code>/<code>"lazy unpack"</code>.</li>
+        <li><code>LibRAWVersion</code> static class: <code>String</code> (via <code>libraw_version</code>), <code>Number</code> (via <code>libraw_versionNumber</code>), and an internal <code>CanCreateContext()</code> smoke helper (<code>libraw_init</code>/<code>libraw_close</code>).</li>
+        <li>Tests: port <code>RAWErrorTests</code> (prefix, code+message embedded, message equality); options description; version smoke asserting <code>"0.22.2-Release"</code> and <code>5634</code>.</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="phase-banner">Phase 3 · Metadata value layer (bottom-up)</div>
+
+<div class="milestone" id="m5">
+    <div class="head"><h3>M5 — Image geometry &amp; identity</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Port the two simplest metadata records — sensor/output geometry and camera identity — establishing
+    the "public constructor + internal from-native constructor + exact <code>ToString()</code>" pattern
+    reused by every later record.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li><code>RAWImageSizes</code> (sealed record) from <code>libraw_image_sizes_t</code>: raw/output width &amp; height, margins, iwidth/iheight, rawPitch, pixelAspect, flip; <code>ToString()</code> → <code>"raw W×H, output W×H"</code>.</li>
+        <li><code>RAWImageInfo</code> (sealed record) from <code>libraw_iparams_t</code> (via <code>libraw_get_iparams</code>): make/model/software/normalized*, colors, filters, colorDescription, rawCount, dngVersion, isFoveon; exact <code>ToString()</code> (uses <code>—</code>, <code>×</code>).</li>
+        <li>Public memberwise constructor + internal from-native constructor for each.</li>
+        <li>Tests: description strings; fixture-driven size sanity (<code>width ≤ rawWidth</code>, etc.) and populated make/model/colors.</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="milestone" id="m6">
+    <div class="head"><h3>M6 — CFA pattern &amp; sensor data</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Port the colour-filter-array model and the sensor-buffer descriptor, including the exact Bayer and
+    X-Trans lookup logic that must match LibRAW bit-for-bit.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li><code>RAWCFAPattern</code> (sealed record, custom structural equality for <code>xTransPattern</code>) with nested <code>Kind</code> enum (<code>None</code>/<code>Bayer</code>/<code>XTrans</code>): derive kind from filters (<code>0</code>→none, <code>9</code>→xTrans, else bayer); <code>FullColorIndex = 6</code>.</li>
+        <li>Port the exact Bayer lookup <code>Color(row, col) = (filters &gt;&gt; ((((row &lt;&lt; 1) &amp; 14) | (col &amp; 1)) &lt;&lt; 1)) &amp; 3</code> and the X-Trans 6×6 grid with <code>((n % 6) + 6) % 6</code> wrap; <code>Channel(row, col)</code>.</li>
+        <li><code>RAWSensorData</code> (sealed record) with nested <code>Layout</code> enum (<code>None</code>/<code>Bayer</code>/<code>Color3</code>/<code>Color4</code>/<code>BayerFloat</code>/<code>Color3Float</code>/<code>Color4Float</code>): width/height/pitch/layout; computed <code>ComponentCount</code>, <code>IsFloatingPoint</code>, <code>HasBuffer</code>; from-native selects layout by first non-null buffer pointer in <code>rawdata</code>.</li>
+        <li>Tests: RGGB color/channel lookups &amp; periodicity, no-CFA case, X-Trans wrap; <code>ComponentCount</code>/<code>IsFloatingPoint</code>/<code>HasBuffer</code> per layout; descriptions.</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="milestone" id="m7">
+    <div class="head"><h3>M7 — Colour data</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Port the colour-calibration record, exercising the trickiest field reads in the marshaled
+    <code>color</code> struct (large arrays, matrices, the <code>cblack</code> accessor, ICC-profile presence).</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li><code>RAWColorData</code> (sealed record, custom structural equality for its arrays/matrices) from <code>libraw_colordata_t</code>: blackLevel, channelBlackLevels (first 4 of <code>cblack</code>), maximum, dataMaximum, cameraMultipliers[4], preMultipliers[4], rgbCamera (3×4), cameraXYZ (4×3), colorMatrix (3×4), hasEmbeddedColorProfile (<code>profile != null</code>), colorProfileLength.</li>
+        <li>Read the four <code>cblack</code> values directly (the port's equivalent of the Swift shim's <code>cblack</code> accessor) and reshape matrices via <code>CFixedArray.Matrix</code>.</li>
+        <li>Tests: array/matrix shapes (4,4,4 / 3×4 / 4×3 / 3×4) and <code>maximum &gt; 0</code>, fixture-driven; custom-equality unit test.</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="milestone" id="m8">
+    <div class="head"><h3>M8 — Lens info</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Port the lens-identity records, including the composed maker-note and DNG sub-records.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li><code>RAWDNGLensInfo</code> (sealed record) from <code>libraw_dnglens_t</code>: min/max focal, max aperture at min/max focal; <code>ToString()</code> → <code>"24–70mm"</code>/<code>"50mm"</code> (invariant, en dash).</li>
+        <li><code>RAWMakerNoteLensInfo</code> (sealed record) from <code>libraw_makernotes_lens_t</code> with nested <code>FocalType</code> enum (<code>Unknown</code>/<code>Fixed</code>/<code>Zoom</code>; <code>1</code>→fixed, <code>2</code>→zoom, else unknown): lensID, lensModel, focalType, focal/aperture/fStops/focus-distance fields.</li>
+        <li><code>RAWLensInfo</code> (sealed record) from <code>libraw_lensinfo_t</code>: focal &amp; aperture floats, lens make/model/serials, focalLengthIn35mmFormat, composing <code>MakerNotes</code> and <code>Dng</code>.</li>
+        <li>Tests: <code>FocalType</code> mapping (1/2/0/-1/99), fixture-driven non-negative focal values, DNG description strings.</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="milestone" id="m9">
+    <div class="head"><h3>M9 — Shot, GPS &amp; camera metadata</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Port the exposure, GPS, and camera-maker-note records, including the timestamp conversion, the
+    failable GPS init, and the reciprocal-shutter formatting.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li><code>RAWShotInfo</code> (sealed record) from <code>libraw_imgother_t</code> + <code>libraw_shootinginfo_t</code>: iso/shutter/aperture/focalLength, <code>Timestamp</code> (<code>DateTimeOffset?</code> from <code>time_t</code> epoch seconds, <code>null</code> when 0), shotOrder, imageDescription/artist/bodySerial; <code>ToString()</code> with reciprocal shutter <code>"1/{n}s"</code> and <code>compactDescription</code> for ISO/aperture/focal; <code>"no exposure data"</code> path; tolerate <code>Infinity</code>/<code>NaN</code>.</li>
+        <li><code>RAWGPSInfo</code> (sealed record) from <code>libraw_gps_info_t</code> via a nullable static factory returning <code>null</code> when <code>gpsparsed == 0</code>: latitude/longitude/altitude, lat/long refs (<code>char?</code>), altitudeRef; internal <code>DecimalDegrees(dms, isNegative)</code> (DMS→signed decimal, missing components → 0).</li>
+        <li><code>RAWCameraMetadata</code> (sealed record) from <code>libraw_metadata_common_t</code>: flash EV &amp; guide number, camera/sensor/lens/ambient/battery temperatures, colorSpace, firmware, realISO, exposureIndex.</li>
+        <li>Tests: shot/gps/camera-metadata field &amp; description tests; <code>DecimalDegrees</code> cases (north <code>48.858333</code>, negation, short/empty input); fixture-driven range checks (nil-safe).</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="phase-banner">Phase 4 · File orchestration</div>
+
+<div class="milestone" id="m10">
+    <div class="head"><h3>M10 — RAWFile: open, unpack, accessors &amp; disposal</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Port the public entry point that ties the interop layer and every value type together: opening,
+    unpacking, all metadata accessors, the raw pixel buffer, description, and deterministic native cleanup.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li><code>RAWFile</code> (sealed class, <code>IDisposable</code>) holding a <code>LibRawHandle</code> and (for the byte-buffer path) a pinned/owned input buffer; <code>Options</code> property.</li>
+        <li>Constructors/factories: from a file path/URL (validate it's a local file &amp; readable → <code>RAWException</code> before touching LibRAW, then <code>libraw_open_file</code>) and from bytes/<code>Data</code> (copy into a pinned buffer owned for the file's lifetime, then <code>libraw_open_buffer</code>).</li>
+        <li>Map open/unpack failures via helpers: <code>LIBRAW_FILE_UNSUPPORTED</code> → unsupported-format; else open/unpack failed; allocation failure → LibRAW error; messages from <code>libraw_strerror</code>. On any failure during construction, recycle/close and free the buffer before throwing.</li>
+        <li><code>Unpack()</code> — idempotent (guard flag), eager in the constructor when <code>Options.UnpacksImmediately</code>, otherwise deferred.</li>
+        <li>Metadata accessors building fresh records from the marshaled native structs: <code>ImageSizes</code>, <code>ImageInfo</code>, <code>CfaPattern</code>, <code>ShotInfo</code>, <code>GpsInfo</code> (<code>?</code>), <code>ColorData</code>, <code>LensInfo</code>, <code>CameraMetadata</code>, <code>SensorData</code>.</li>
+        <li>Raw pixel access: <code>RawImage</code> (<code>ushort[]?</code> copy, length <code>raw_height × raw_pitch/2</code>) and <code>WithRawImage&lt; T &gt;( … )</code> exposing a zero-copy <code>ReadOnlySpan&lt; ushort &gt;</code>; both <code>null</code>/no-op when no buffer.</li>
+        <li><code>ToString()</code> — rich one-line summary (camera + <code>rawW×rawH</code> + CFA + exposure + lens).</li>
+        <li><code>Dispose</code>/finalizer via the <code>SafeHandle</code>; throw <code>ObjectDisposedException</code> from accessors after disposal.</li>
+        <li>Tests: port <code>RAWFileTests</code> — invalid (non-file) URL → invalid-file-URL; nonexistent path → cannot-read-file; garbage/empty bytes → <code>RAWException</code>; eager open, lazy open + idempotent <code>Unpack</code>, open-from-bytes, each asserting a non-empty description. Gate any file-permission-based test to non-Windows (mirrors DotNetFITS).</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="phase-banner">Phase 5 · Integration &amp; finalization</div>
+
+<div class="milestone" id="m11">
+    <div class="head"><h3>M11 — Integration tests &amp; sample-file parity</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Wire the fixture-parameterised tests to the real CR3 sample and assert cross-type consistency and
+    behavioural parity with SwiftRAW end to end.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li>Wire the <code>[ Theory ]</code> fixture source to <code>Test Files/</code> (<code>0H8A0311.CR3</code>) via <code>TestUtilities.RawFileUrls</code>.</li>
+        <li>Port the fixture-driven checks: sizes vs <code>ImageInfo</code> consistency; CFA matches <code>ImageInfo</code>; sensor geometry <code>RawImage.Length == height × (pitch / 2)</code> and <code>Max &gt; 0</code> and view length matches copy; populated make/model/colors; non-negative exposure values; colour array/matrix shapes; the rich file description containing <code>×</code>; fixture-discovery consistency.</li>
+        <li>Port <code>DescriptionsTests</code>' fixture-driven portions.</li>
+        <li>Confirm behaviour matches SwiftRAW on the CR3 (metadata values, description shape), adapting only where a difference is a legitimate language-runtime convention.</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="milestone" id="m12">
+    <div class="head"><h3>M12 — Finalization: clean build, README, CI parity</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Bring the port to a shippable state: a clean warning-free build in both configurations on both
+    platforms, an updated README on the maintainer's template, and CI parity.</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li>Clean build in Debug + Release with <strong>0 warnings</strong>; full suite green on macOS and Windows CI.</li>
+        <li>Sweep for any references to the Swift original / Foundation / Swift idioms in code, doc-comments, and tests; describe everything on its own terms.</li>
+        <li>Update <code>README.md</code> to the maintainer's standard template: title + badges, About, Status (read-only scope: no demosaic/thumbnail/write), Requirements (incl. the native LibRAW 0.22.2 dependency and supported RIDs), Building (<code>dotnet build</code>/<code>dotnet test -c Release</code>), Example Usage (open, read metadata, access raw buffer), License, Repository Infos.</li>
+        <li>Compile-verify the README examples against the built library.</li>
+        <li>Confirm <code>ci-win.yaml</code> passes with the native DLL in place; note the macOS native path is exercised locally.</li>
+        <li>Move this plan from <code>Docs/agent-plans/active/</code> to <code>Docs/agent-plans/completed/</code> once done (per the maintainer's workflow).</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<div class="milestone" id="m13">
+    <div class="head"><h3>M13 — NuGet package: bundle native binaries for all supported RIDs</h3><span class="status not-started">Not started</span></div>
+    <div class="field">Goal</div>
+    <p>Produce a distributable NuGet package — <strong>built from macOS via a <code>Makefile</code>, mirroring
+    DotNetFITS's packaging</strong> — that embeds the native LibRAW binary for every supported runtime
+    identifier, so a consumer can <code>dotnet add package</code> and get the correct native resolved
+    automatically on Windows and macOS, with no building from source. Added after the initial plan at the
+    maintainer's request (possible NuGet publication).</p>
+    <div class="field">Tasks</div>
+    <ul class="task-list">
+        <li><strong>Makefile (as in DotNetFITS).</strong> Add a cross-platform root <code>Makefile</code> mirroring
+            <code>../DotNetFITS/Makefile</code>: a <code>DOTNET</code> variable
+            (<code>$(shell command -v dotnet || echo /usr/local/share/dotnet/dotnet)</code>) and
+            <code>build</code> / <code>test</code> / <code>pack</code> / <code>clean</code> targets, with
+            <code>pack</code> running <code>$(DOTNET) pack DotNetRAW/DotNetRAW.csproj -c Release -o build/</code>,
+            so <code>make pack</code> produces the <code>.nupkg</code> on macOS (output under <code>build/</code>,
+            git-ignored). <code>clean</code> removes the <code>*.nupkg</code>/<code>*.snupkg</code>.</li>
+        <li><strong>Package metadata (mirror DotNetFITS).</strong> Add to the library csproj:
+            <code>PackageId=DotNetRAW</code>, <code>Version</code>, <code>Authors</code> (Jean-David Gadina),
+            <code>Company</code> (XS-Labs), a <code>Description</code> stating the read-only scope
+            (no demosaic/thumbnail/write), <code>PackageTags</code> (e.g.
+            <code>raw;libraw;photography;camera;image;io</code>), <code>PackageLicenseExpression=MIT</code>,
+            <code>PackageProjectUrl</code>/<code>RepositoryUrl</code>/<code>RepositoryType=git</code>,
+            <code>PackageReadmeFile=README.md</code> (packed via
+            <code>&lt;None Include="..\README.md" Pack="true" PackagePath="\" /&gt;</code>),
+            <code>Copyright</code>, and <code>IncludeSymbols=true</code> + <code>SymbolPackageFormat=snupkg</code>.</li>
+        <li><strong>Runtime requirements — bundle the natives (the LibRAW-specific difference from the
+            pure-managed DotNetFITS).</strong> A consumer needs the correct native LibRAW binary at run time,
+            so the package must carry, for every supported RID, its native under
+            <code>runtimes/&lt;rid&gt;/native/libraw.&lt;ext&gt;</code> via pack metadata
+            (<code>Pack="true"</code> + <code>PackagePath="runtimes/&lt;rid&gt;/native/"</code>), included
+            <em>unconditionally</em> for all RIDs — so NuGet's RID-based native-asset resolution copies the
+            right one into the consumer's output automatically (no custom consumer <code>.targets</code> for
+            plain P/Invoke-by-name). The universal macOS dylib is packed once under
+            <code>runtimes/osx/native/</code>; both <code>osx-arm64</code> and <code>osx-x64</code> consumers
+            resolve it through the RID fallback graph. M1's host-RID build-time copy wiring stays for local
+            build/test only.</li>
+        <li>Native RID set the package carries: <code>win-x64</code> (Windows DLL) and the <strong>universal</strong>
+            macOS dylib from M1 (serves both <code>osx-arm64</code> and <code>osx-x64</code> — no separate
+            <code>osx-x64</code> binary needed). Decide whether to also add <code>win-arm64</code> and/or
+            <code>linux-x64</code> (each needs its own compiled <code>libraw</code>). Verify each reports
+            <code>0.22.2-Release</code> / <code>5634</code>.</li>
+        <li>Confirm the natives are self-contained: the macOS <code>.dylib</code> needs only system libraries
+            (verified in M1); verify the Windows <code>libraw.dll</code> statically bundles its dependencies
+            (zlib/jpeg) or bundle any required side-by-side DLLs.</li>
+        <li><strong>Native licensing.</strong> The bundled LibRAW native is LGPL-2.1 / CDDL-1.0, distinct from
+            the library's MIT. <code>PackageLicenseExpression=MIT</code> covers the C# code; document LibRAW's
+            license in the README and include LibRAW's <code>LICENSE</code> in the package (via
+            <code>PackagePath</code>) so the native's redistribution terms travel with it.</li>
+        <li><code>make pack</code> in Release; inspect the <code>.nupkg</code> (correct
+            <code>runtimes/&lt;rid&gt;/native/</code> layout, valid nuspec, no packaging warnings such as
+            <code>NU5100</code>), then consume it from a throwaway project on macOS to confirm the native
+            resolves and the metadata reads at run time. Ensure the M1 build-time copy wiring and the pack
+            metadata coexist without double-including the native or emitting warnings.</li>
+        <li>Document the publishing mechanics (NuGet.org API key, an optional CI publish step) without
+            automating them unless explicitly requested.</li>
+    </ul>
+    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
+    <div class="field">Completed</div><p class="placeholder">—</p>
+    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
+    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
+    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+</div>
+
+<h2 id="appendix">Appendix</h2>
+
+<h3>Dependency order</h3>
+<pre><code>native packaging (M1) → interop bindings + structs + SafeHandle (M2) → helpers + test infra (M3)
+  → errors, options, version (M4)
+    → image sizes/info (M5) → CFA + sensor (M6) → colour (M7) → lens (M8) → shot/GPS/camera (M9)
+      → RAWFile (M10) → integration &amp; parity (M11) → finalization (M12) → nuget package (M13)</code></pre>
+<p class="small">
+    M5–M9 are independent of one another (each ports one concern's records) and can be reordered, but all
+    depend on M2 (marshalable structs) and M3 (helpers). M10 depends on M2–M9. Each milestone leaves the
+    solution compiling with all tests green so it can be reviewed and committed alone.
+</p>
+
+<h3>LibRAW C entry points used by the port</h3>
+<p class="small">
+    Lifecycle/open/unpack: <code>libraw_init</code>, <code>libraw_open_file</code>,
+    <code>libraw_open_buffer</code>, <code>libraw_unpack</code>, <code>libraw_recycle</code>,
+    <code>libraw_close</code>. Getters: <code>libraw_get_iparams</code>,
+    <code>libraw_get_lensinfo</code>, <code>libraw_get_imgother</code>. Diagnostics/version:
+    <code>libraw_strerror</code>, <code>libraw_version</code>, <code>libraw_versionNumber</code>. Direct
+    reads off the marshaled <code>libraw_data_t</code>: <code>sizes</code>, <code>idata</code>,
+    <code>lens</code>, <code>other</code>, <code>other.parsed_gps</code>, <code>shootinginfo</code>,
+    <code>color</code>, <code>makernotes.common</code>, <code>rawdata</code> (incl.
+    <code>rawdata.raw_image</code>).
+</p>
+
+<h3>Build &amp; test commands</h3>
+<pre><code>dotnet build DotNetRAW.slnx -c Debug
+dotnet build DotNetRAW.slnx -c Release
+dotnet test  DotNetRAW.slnx -c Debug
+dotnet test  DotNetRAW.slnx -c Release</code></pre>
+<p class="small">Every milestone must be green in both Debug and Release with 0 warnings, on macOS locally and on the Windows CI.</p>
+
+</div>

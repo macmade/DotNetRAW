@@ -4,6 +4,7 @@
     <TargetFramework>net10.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CheckForOverflowUnderflow>true</CheckForOverflowUnderflow>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
@@ -12,5 +13,42 @@
   <ItemGroup>
     <InternalsVisibleTo Include="DotNetRAWTests" />
   </ItemGroup>
+
+  <!-- Native LibRAW binary packaging.
+
+       The library binds LibRAW's flat C API through P/Invoke against a native
+       library named "libraw" (libraw.dll on Windows, libraw.dylib on macOS).
+       The binary matching the host runtime identifier is copied flat next to
+       the built assembly - and, transitively, next to any assembly that
+       references this project, such as the test project - so DllImport resolves
+       it from the application base directory at run time. The runtime
+       identifier can be overridden with the LibRawRuntimeIdentifier property;
+       it otherwise follows an explicit -r RID and finally the host SDK RID.
+
+       macOS ships a single universal (arm64 + x86_64) dylib under the generic
+       "osx" runtime identifier, so every osx-* RID maps to it; Windows ships a
+       per-architecture DLL under its own RID. -->
+  <PropertyGroup>
+    <LibRawRuntimeIdentifier Condition="'$(LibRawRuntimeIdentifier)' == ''">$(RuntimeIdentifier)</LibRawRuntimeIdentifier>
+    <LibRawRuntimeIdentifier Condition="'$(LibRawRuntimeIdentifier)' == ''">$(NETCoreSdkPortableRuntimeIdentifier)</LibRawRuntimeIdentifier>
+    <LibRawNativeRid>$(LibRawRuntimeIdentifier)</LibRawNativeRid>
+    <LibRawNativeRid Condition="$(LibRawNativeRid.StartsWith('osx'))">osx</LibRawNativeRid>
+    <LibRawNativeDirectory>$(MSBuildThisFileDirectory)../runtimes/$(LibRawNativeRid)/native/</LibRawNativeDirectory>
+  </PropertyGroup>
+
+  <ItemGroup Condition="Exists('$(LibRawNativeDirectory)')">
+    <None Include="$(LibRawNativeDirectory)libraw.*">
+      <Link>%(Filename)%(Extension)</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <!-- Fail loudly at build time when no native LibRAW binary is bundled for the
+       host runtime identifier. Without this the build still succeeds, but every
+       P/Invoke into LibRAW throws DllNotFoundException at run time with no hint
+       as to why. -->
+  <Target Name="_WarnMissingLibRawNative" BeforeTargets="Build" Condition="!Exists('$(LibRawNativeDirectory)')">
+    <Warning Text="No native LibRAW binary is bundled for runtime identifier '$(LibRawRuntimeIdentifier)' (looked in '$(LibRawNativeDirectory)'). Calls into LibRAW will fail at run time with a DllNotFoundException. Bundled: win-x64 (libraw.dll) and osx (universal libraw.dylib)." />
+  </Target>
 
 </Project>
