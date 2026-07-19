@@ -328,7 +328,7 @@
     </ol>
     <div class="phase">Phase 2 · Core types</div>
     <ol>
-        <li><span class="id">M4</span><a href="#m4">Errors, options &amp; version</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M4</span><a href="#m4">Errors, options &amp; version</a><span class="status completed">Completed</span></li>
     </ol>
     <div class="phase">Phase 3 · Metadata value layer (bottom-up)</div>
     <ol>
@@ -549,7 +549,7 @@
 <div class="phase-banner">Phase 2 · Core types</div>
 
 <div class="milestone" id="m4">
-    <div class="head"><h3>M4 — Errors, options &amp; version</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M4 — Errors, options &amp; version</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Port the leaf types the file layer throws, is parameterised by, and reports through: the exception
     model, parsing options, and the LibRAW version surface.</p>
@@ -561,11 +561,75 @@
         <li><code>LibRAWVersion</code> static class: <code>String</code> (via <code>libraw_version</code>), <code>Number</code> (via <code>libraw_versionNumber</code>), and an internal <code>CanCreateContext()</code> smoke helper (<code>libraw_init</code>/<code>libraw_close</code>).</li>
         <li>Tests: port <code>RAWErrorTests</code> (prefix, code+message embedded, message equality); options description; version smoke asserting <code>"0.22.2-Release"</code> and <code>5634</code>.</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Built TDD-style (tests written first and watched fail to compile, then the types implemented to green).
+    The four types live in <code>DotNetRAW/Core/</code> (mirroring SwiftRAW's layout); tests under
+    <code>DotNetRAWTests/Core/</code>. Green in <strong>both Debug and Release</strong>: 39 tests (11 new), 0
+    warnings. Modelled on the DotNetFITS exception/kind/options shape.</p>
+    <ul>
+        <li><strong><code>RAWErrorKind</code></strong> — public enum with the six cases
+            (<code>InvalidFileURL</code>, <code>CannotReadFile</code>, <code>OpenFailed</code>,
+            <code>UnpackFailed</code>, <code>UnsupportedFormat</code>, <code>LibRawError</code>), keeping the
+            source case names (as DotNetFITS does).</li>
+        <li><strong><code>RAWException : Exception</code></strong> (public sealed) — a
+            <code>MessagePrefix = "RAW Error: "</code> const, a <code>Kind</code> discriminator, a private
+            <code>(kind, code, description)</code> constructor, and one static factory per case. Every rendered
+            message matches the source byte-for-byte (pinned by an exact-message test). Beyond the source's
+            associated values, the exception exposes the LibRAW status <code>Code</code> as a
+            <code>public int?</code> (null for the pre-LibRAW cases) so callers can inspect the exact failure;
+            the human message stays in <code>Message</code>. The code is formatted with
+            <code>CultureInfo.InvariantCulture</code> (CA1305). Public-API throwing is the plan's documented
+            override of the "avoid throwing from public methods" house rule.</li>
+        <li><strong><code>RAWParsingOptions</code></strong> — <code>public readonly record struct</code> with
+            <code>UnpacksImmediately</code> (<code>init</code>), a <code>Default</code> static property and a
+            parameterless constructor both eager, plus a <code>bool</code> constructor and a
+            <code>ToString()</code> → <code>"eager unpack"</code>/<code>"lazy unpack"</code>. Record equality
+            compares the single flag. The value-type <code>default</code> gotcha (see review L1) is documented on
+            the type.</li>
+        <li><strong><code>LibRAWVersion</code></strong> — <code>public static class</code> reading through the
+            M2 bindings: <code>String</code> (<code>libraw_version</code> → <code>Marshal.PtrToStringUTF8</code>,
+            null → <code>""</code>), <code>Number</code> (<code>libraw_versionNumber</code>), and an
+            <code>internal CanCreateContext()</code> that spins up and releases a context through a
+            <code>using LibRawHandle</code> (recycle + close on dispose). The member names <code>String</code>/
+            <code>Number</code> follow the plan/source; access is always qualified.</li>
+        <li>The consuming open API in <strong>M10</strong> must default its options parameter to
+            <code>RAWParsingOptions.Default</code> (not <code>= default</code>), or the value-type default would
+            silently select lazy unpacking — carried forward from review L1.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent; it built the library and tests in Debug <em>and</em> Release,
+    ran all tests green in both, cross-checked every rendered message against the SwiftRAW originals
+    line-by-line, and verified the version bindings, SafeHandle lifetime, visibility, and culture-invariance).
+    Outcome: <strong>converged — no Critical/High/Medium findings; no M1–M3 regression.</strong></p>
+    <ul>
+        <li><strong>Exact message text was not pinned by a test</strong> — <em>Low</em> — the tests asserted the
+            <code>"RAW Error:"</code> prefix and payload but not the full template, a thin guard for the exact
+            string-parity goal. <strong>Fixed:</strong> added a <code>MessagesRenderExactly</code> test pinning
+            all six full messages.</li>
+        <li><strong><code>default(RAWParsingOptions)</code> is lazy, not eager</strong> — <em>Low</em> — the
+            language default of the value type zero-inits to lazy, the opposite of <code>Default</code>. Safe as
+            authored (documented on the type; unused in M4). <strong>Deferred with a forward action:</strong> M10
+            must consume it via <code>RAWParsingOptions.Default</code>, never <code>= default</code> (noted
+            above).</li>
+        <li><strong>Path vs <code>file://</code> URL payload</strong> — <em>Info</em> — the source interpolates
+            <code>url.absoluteString</code>; the C# factory embeds the plain path (the API is path-based, no
+            Foundation URL). Message template identical. <strong>Deferred</strong> (deliberate).</li>
+        <li><strong><code>fr-FR</code> guard is weak for a plain <code>int</code></strong> — <em>Info</em> —
+            integers never group, so the culture test is moot in practice; CA1305 catches the real regression at
+            build time. <strong>Deferred</strong> (no action).</li>
+        <li><strong><code>String</code> member mirrors the type name</strong> — <em>Info</em> — CA1720 would flag
+            it under stricter analysis, but that rule is not enabled and access is always qualified.
+            <strong>Deferred</strong> (faithful to the plan/source).</li>
+        <li><strong>No inner-exception plumbing</strong> — <em>Info</em> — factories take no
+            <code>innerException</code>; matches the source. <strong>Deferred</strong> (possible M10
+            enhancement).</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <p>Approved as implemented — no change requests. The Low/Info automated-review findings were surfaced and
+    accepted as-is; the L1 <code>default</code>-vs-<code>Default</code> guidance is recorded as a forward action
+    for M10 (not baked into M10's task list).</p>
 </div>
 
 <div class="phase-banner">Phase 3 · Metadata value layer (bottom-up)</div>
