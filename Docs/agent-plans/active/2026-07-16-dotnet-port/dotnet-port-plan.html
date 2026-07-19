@@ -332,7 +332,7 @@
     </ol>
     <div class="phase">Phase 3 · Metadata value layer (bottom-up)</div>
     <ol>
-        <li><span class="id">M5</span><a href="#m5">Image geometry &amp; identity</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M5</span><a href="#m5">Image geometry &amp; identity</a><span class="status completed">Completed</span></li>
         <li><span class="id">M6</span><a href="#m6">CFA pattern &amp; sensor data</a><span class="status not-started">Not started</span></li>
         <li><span class="id">M7</span><a href="#m7">Colour data</a><span class="status not-started">Not started</span></li>
         <li><span class="id">M8</span><a href="#m8">Lens info</a><span class="status not-started">Not started</span></li>
@@ -635,7 +635,7 @@
 <div class="phase-banner">Phase 3 · Metadata value layer (bottom-up)</div>
 
 <div class="milestone" id="m5">
-    <div class="head"><h3>M5 — Image geometry &amp; identity</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M5 — Image geometry &amp; identity</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Port the two simplest metadata records — sensor/output geometry and camera identity — establishing
     the "public constructor + internal from-native constructor + exact <code>ToString()</code>" pattern
@@ -647,11 +647,66 @@
         <li>Public memberwise constructor + internal from-native constructor for each.</li>
         <li>Tests: description strings; fixture-driven size sanity (<code>width ≤ rawWidth</code>, etc.) and populated make/model/colors.</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Built TDD-style (tests written first and watched fail to compile, then the records implemented to green).
+    The two records live in <code>DotNetRAW/Image/</code>; tests under <code>DotNetRAWTests/Image/</code>. Green in
+    <strong>both Debug and Release</strong>: 48 tests (9 new), 0 warnings. This milestone establishes the
+    record pattern the later value types reuse.</p>
+    <ul>
+        <li><strong>Record pattern.</strong> Both are <code>sealed record</code>s with a public memberwise
+            constructor and an <code>internal</code> from-native constructor that chains to the public one
+            (<code>: this( … )</code>) — the "public + from-native + exact <code>ToString()</code>" shape reused
+            by M6–M9. Get-only auto-properties give the C#-synthesized value equality (matching the source's
+            value semantics); the <code>ToString()</code> override replaces the record's synthesized one.</li>
+        <li><strong><code>RAWImageSizes</code></strong> — from <code>LibRawImageSizes</code>: raw/output width &amp;
+            height, margins, <code>IWidth</code>/<code>IHeight</code>, <code>RawPitch</code>,
+            <code>PixelAspect</code> (double), <code>Flip</code>. <code>ToString()</code> →
+            <code>"raw W×H, output W×H"</code> (× = U+00D7).</li>
+        <li><strong><code>RAWImageInfo</code></strong> — from <code>LibRawIParams</code>: make/model/software/
+            normalized identifiers (decoded UTF-8-to-NUL via <code>DecodeCString</code>), <code>Colors</code>,
+            <code>Filters</code> (kept <code>uint</code>), <code>ColorDescription</code>, <code>RawCount</code>,
+            <code>DngVersion</code>, <code>IsFoveon</code> (<code>is_foveon != 0</code>). <code>ToString()</code>
+            → <code>"Make Model — N colors (RGBG)"</code> (— = U+2014), trimming and falling back to
+            <code>"Unknown camera"</code> when make and model are both empty.</li>
+        <li><strong>Types &amp; signedness.</strong> The public API uses <code>int</code> for the dimension/count
+            fields (mirroring the source's <code>Int</code>) and keeps <code>Filters</code> as <code>uint</code>;
+            interop <code>ushort</code>→<code>int</code> widen implicitly, <code>uint</code>→<code>int</code> use
+            explicit casts. Descriptions render through
+            <code>string.Create( CultureInfo.InvariantCulture, … )</code>, satisfying the culture rule and CA1305
+            while keeping the exact Unicode punctuation.</li>
+        <li><strong>Test scope.</strong> Exact descriptions (incl. the Unknown-camera and trim paths, and a
+            required <code>fr-FR</code> culture test on each) and the full from-native field mapping (built by
+            constructing the marshaled interop structs directly, reachable via
+            <code>InternalsVisibleTo</code>). The fixture-driven end-to-end sanity checks
+            (<code>width ≤ rawWidth</code> on the real CR3) depend on <code>RAWFile</code> (M10) and are covered
+            in M11 — noted so the plan's M5 test bullet is read against that split.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent; built the library and tests in Debug <em>and</em> Release, ran
+    all tests green in both, and verified the descriptions against the SwiftRAW originals by Unicode codepoint —
+    not glyph — plus the full field mapping/signedness, record equality, and culture-invariance). Outcome:
+    <strong>converged — no Critical/High/Medium findings; no M1–M4 regression.</strong></p>
+    <ul>
+        <li><strong>Missing non-invariant-culture test</strong> — <em>Low</em> — the two number-formatting
+            descriptions shipped without the <code>fr-FR</code> test the <code>.editorconfig</code> mandates for
+            any milestone that formats numbers (and that M1/M3/M4 all include). <strong>Fixed:</strong> added a
+            <code>DescriptionIsCultureInvariant</code> test to both classes, seeding the pattern the
+            double-formatting records (M6–M9) will rely on.</li>
+        <li><strong>Checked <code>(int)</code> casts can trap on pathological input</strong> — <em>Info</em> — a
+            <code>uint</code> ≥ 2³¹ would throw <code>OverflowException</code> under
+            <code>CheckForOverflowUnderflow</code> where the source's 64-bit <code>Int</code> would not.
+            Unreachable with real data (<code>raw_pitch</code>/<code>raw_count</code>/<code>dng_version</code> are
+            physically bounded) and confined to the internal from-native path. <strong>Deferred</strong> (no
+            action).</li>
+        <li><strong><code>string.Trim()</code> trims a broader whitespace set than the source</strong> —
+            <em>Info</em> — it also strips newlines, which the source's whitespace set does not; never differs for
+            NUL-terminated camera strings. <strong>Deferred</strong> (no action).</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <p>Approved as implemented — no change requests. The two Info-level automated-review findings were surfaced
+    and accepted as-is.</p>
 </div>
 
 <div class="milestone" id="m6">
