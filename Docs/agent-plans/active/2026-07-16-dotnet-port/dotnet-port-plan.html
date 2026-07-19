@@ -333,7 +333,7 @@
     <div class="phase">Phase 3 · Metadata value layer (bottom-up)</div>
     <ol>
         <li><span class="id">M5</span><a href="#m5">Image geometry &amp; identity</a><span class="status completed">Completed</span></li>
-        <li><span class="id">M6</span><a href="#m6">CFA pattern &amp; sensor data</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M6</span><a href="#m6">CFA pattern &amp; sensor data</a><span class="status completed">Completed</span></li>
         <li><span class="id">M7</span><a href="#m7">Colour data</a><span class="status not-started">Not started</span></li>
         <li><span class="id">M8</span><a href="#m8">Lens info</a><span class="status not-started">Not started</span></li>
         <li><span class="id">M9</span><a href="#m9">Shot, GPS &amp; camera metadata</a><span class="status not-started">Not started</span></li>
@@ -710,7 +710,7 @@
 </div>
 
 <div class="milestone" id="m6">
-    <div class="head"><h3>M6 — CFA pattern &amp; sensor data</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M6 — CFA pattern &amp; sensor data</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Port the colour-filter-array model and the sensor-buffer descriptor, including the exact Bayer and
     X-Trans lookup logic that must match LibRAW bit-for-bit.</p>
@@ -721,11 +721,72 @@
         <li><code>RAWSensorData</code> (sealed record) with nested <code>Layout</code> enum (<code>None</code>/<code>Bayer</code>/<code>Color3</code>/<code>Color4</code>/<code>BayerFloat</code>/<code>Color3Float</code>/<code>Color4Float</code>): width/height/pitch/layout; computed <code>ComponentCount</code>, <code>IsFloatingPoint</code>, <code>HasBuffer</code>; from-native selects layout by first non-null buffer pointer in <code>rawdata</code>.</li>
         <li>Tests: RGGB color/channel lookups &amp; periodicity, no-CFA case, X-Trans wrap; <code>ComponentCount</code>/<code>IsFloatingPoint</code>/<code>HasBuffer</code> per layout; descriptions.</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Built TDD-style (tests first, watched fail, then implemented to green). The two records live in
+    <code>DotNetRAW/Image/</code>; tests under <code>DotNetRAWTests/Image/</code>. Green in <strong>both Debug and
+    Release</strong>: 64 tests (16 new), 0 warnings.</p>
+    <ul>
+        <li><strong>Nested-enum naming.</strong> C# forbids a property and a nested type sharing a name (CS0102),
+            and the source's <code>kind</code>/<code>layout</code> properties both PascalCase to the same name as
+            their nested <code>Kind</code>/<code>Layout</code> enums. Since the plan explicitly names the nested
+            <em>enums</em> <code>Kind</code>/<code>Layout</code>, those are kept and the <em>properties</em> renamed
+            to <code>PatternKind</code> and <code>BufferLayout</code>. (The review confirmed this is the most
+            faithful resolution — a top-level enum would diverge from both the plan and the nested Swift
+            structure, and it aligns with the nested-enum pattern M8/M9 will reuse.)</li>
+        <li><strong><code>RAWCFAPattern</code></strong> — nested <code>Kind</code> enum (None/Bayer/XTrans);
+            <code>Filters</code>, <code>ColorDescription</code>, <code>XTransPattern</code> (<code>int[][]?</code>),
+            <code>FullColorIndex = 6</code>. Kind derived from filters (0→None, 9→XTrans, else Bayer). Ported the
+            exact Bayer lookup <code>(filters &gt;&gt; ((((row&lt;&lt;1)&amp;14)|(col&amp;1))&lt;&lt;1)) &amp; 3</code>
+            and the X-Trans 6×6 grid with <code>((n%6)+6)%6</code> wrap; <code>Color(row,col)</code> and
+            <code>Channel(row,col)</code> (returns <code>char?</code>). The from-native ctor reshapes the flat
+            <code>xtrans</code> (<code>sbyte[36]</code>→<code>int[][]</code> 6×6 via <code>CFixedArray.Matrix</code>)
+            only when filters == 9. <strong>Custom structural equality</strong>: <code>Equals(RAWCFAPattern?)</code>
+            + <code>GetHashCode()</code> deep-compare the <code>XTransPattern</code> grid (the record's
+            <code>==</code>/<code>Equals(object)</code>/copy-ctor all route through them; no synthesized bypass).</li>
+        <li><strong><code>RAWSensorData</code></strong> — nested <code>Layout</code> enum (7 variants);
+            <code>Width</code>/<code>Height</code>/<code>Pitch</code>/<code>BufferLayout</code>; computed
+            <code>ComponentCount</code>/<code>IsFloatingPoint</code>/<code>HasBuffer</code>. The from-native ctor
+            selects the layout by the first non-null buffer pointer in the source's priority order
+            (raw→color3→color4→float→float3→float4, i.e. color3 before color4, independent of the native struct's
+            memory order) and reads the geometry from the sizes. <code>ToString()</code> →
+            <code>"W×H layout (N component(s))"</code> with the component word pluralized and the exact layout
+            names (<code>none</code>/<code>Bayer</code>/<code>3-channel</code>/…). Descriptions render through
+            <code>string.Create( CultureInfo.InvariantCulture, … )</code> (× = U+00D7), with the mandated
+            <code>fr-FR</code> culture test.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent; built Debug <em>and</em> Release, ran all 64 tests green in both,
+    hand-traced the Bayer bit math / X-Trans wrap / equality routing / from-native priority order, and verified
+    the descriptions against the SwiftRAW originals by Unicode codepoint). Outcome: <strong>converged — no
+    Critical/High/Medium findings; no M1–M5 regression.</strong> The reviewer also endorsed the nested-enum
+    property-naming resolution.</p>
+    <ul>
+        <li><strong>fr-FR test can't discriminate a regression for integer-only output</strong> — <em>Info</em> —
+            the mandated culture test is present, but every formatted hole is a small integer that renders
+            identically in any culture, so the guard is a near no-op for this type (inherent; the type is
+            culture-safe regardless). <strong>Deferred</strong> (no action; the <code>string.Create</code> usage is
+            still correct and consistent with the house convention).</li>
+        <li><strong>Public grid constructor does not validate jagged-array shape</strong> — <em>Low</em> — a
+            pathological caller passing a grid with a null inner row could throw from <code>Color</code>/
+            <code>GetHashCode</code>/<code>GridsEqual</code>. Unreachable in normal use (the source type cannot
+            express null rows; the from-native path never produces them). <strong>Deferred</strong> — the reviewer
+            explicitly recommends <em>not</em> adding validation (it would gold-plate beyond the source contract),
+            and the house rule prefers public methods not throw; rows of differing length are already handled
+            safely.</li>
+        <li><strong><code>PatternKind</code> is redundant with <code>Filters</code> in equality/hash</strong> —
+            <em>Info</em> — kind is derived from filters, so including both is redundant but harmless and arguably
+            self-documenting. <strong>Deferred</strong> (no action).</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <ol>
+        <li><strong>Question: what is the "<code>PatternKind</code> is redundant with <code>Filters</code>"
+            finding?</strong> Asked for an explanation of the Info finding. Answered in discussion — no code change
+            (<code>PatternKind</code> is derived from <code>Filters</code> in the constructor, so comparing
+            <code>Filters</code> in equality already implies kind equality; including <code>PatternKind</code> is
+            harmless, self-documenting redundancy, not a bug).</li>
+    </ol>
 </div>
 
 <div class="milestone" id="m7">
