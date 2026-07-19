@@ -336,7 +336,7 @@
         <li><span class="id">M6</span><a href="#m6">CFA pattern &amp; sensor data</a><span class="status completed">Completed</span></li>
         <li><span class="id">M7</span><a href="#m7">Colour data</a><span class="status completed">Completed</span></li>
         <li><span class="id">M8</span><a href="#m8">Lens info</a><span class="status completed">Completed</span></li>
-        <li><span class="id">M9</span><a href="#m9">Shot, GPS &amp; camera metadata</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M9</span><a href="#m9">Shot, GPS &amp; camera metadata</a><span class="status completed">Completed</span></li>
     </ol>
     <div class="phase">Phase 4 · File orchestration</div>
     <ol>
@@ -946,7 +946,7 @@
 </div>
 
 <div class="milestone" id="m9">
-    <div class="head"><h3>M9 — Shot, GPS &amp; camera metadata</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M9 — Shot, GPS &amp; camera metadata</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Port the exposure, GPS, and camera-maker-note records, including the timestamp conversion, the
     failable GPS init, and the reciprocal-shutter formatting.</p>
@@ -957,11 +957,106 @@
         <li><code>RAWCameraMetadata</code> (sealed record) from <code>libraw_metadata_common_t</code>: flash EV &amp; guide number, camera/sensor/lens/ambient/battery temperatures, colorSpace, firmware, realISO, exposureIndex.</li>
         <li>Tests: shot/gps/camera-metadata field &amp; description tests; <code>DecimalDegrees</code> cases (north <code>48.858333</code>, negation, short/empty input); fixture-driven range checks (nil-safe).</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Built TDD-style: the three metadata test files were written first and watched fail to compile, then the
+    records implemented to green. The records live in <code>DotNetRAW/Metadata/</code>; tests under
+    <code>DotNetRAWTests/Metadata/</code>. Green in <strong>both Debug and Release</strong>: 103 tests (21 new), 0
+    warnings.</p>
+    <ul>
+        <li><strong><code>RAWShotInfo</code></strong> (sealed record) — from <strong>two</strong> structs
+            (<code>LibRawImgOther</code> + <code>LibRawShootingInfo</code>). ISO/shutter/aperture/focal,
+            <code>Timestamp</code> (<code>DateTimeOffset?</code>, <strong>null</strong> when the 64-bit
+            <code>time_t</code> is 0 or out of representable range — see the human-review fixes below),
+            <code>ShotOrder</code>,
+            <code>ImageDescription</code>/<code>Artist</code>/<code>BodySerial</code> (UTF-8-to-NUL). A private
+            <code>ShutterDescription()</code> renders a rounded reciprocal <code>"1/{n}s"</code> for sub-second
+            speeds (<code>MathF.Round</code> with <strong><code>MidpointRounding.AwayFromZero</code></strong> to match
+            Swift's <code>rounded()</code>, guarded by <code>IsFinite &amp;&amp; &lt; 1e9</code>), whole seconds
+            otherwise, and <code>"no exposure data"</code> when nothing is recorded; <code>NaN</code>/
+            <code>Infinity</code> are tolerated (omitted / non-crashing). The reciprocal integer hole renders
+            invariant; the float holes go through the invariant <code>CompactDescription</code>.</li>
+        <li><strong><code>RAWGPSInfo</code></strong> (sealed record) — the first failable native path: an
+            <code>internal static FromNative( LibRawGpsInfo )</code> returning <code>RAWGPSInfo?</code>
+            (<strong>null</strong> when <code>gpsparsed == 0</code>) — the idiomatic C# translation of the source's
+            <code>init?</code>, since a constructor cannot return null. DMS→signed decimal via
+            <code>internal static DecimalDegrees</code> (missing components → 0); altitude negated when
+            <code>altref == 1</code>; <code>sbyte</code> reference bytes → <code>char?</code> (byte&#160;&gt;&#160;0);
+            <code>isNegative</code> derived from <code>latitudeRef == 'S'</code>/<code>longitudeRef == 'W'</code>
+            (false when the reference is null). The description renders the raw <code>double</code> latitude/longitude
+            invariantly (<code>string.Create</code> + <code>InvariantCulture</code>) with the altitude via
+            <code>CompactDescription</code>.</li>
+        <li><strong><code>RAWCameraMetadata</code></strong> (sealed record) — from <code>LibRawMetadataCommon</code>.
+            Flash EV/GN, five temperatures, <code>ColorSpace</code> (<code>ushort</code>→<code>int</code>),
+            <code>Firmware</code>, <code>RealISO</code>, <code>ExposureIndex</code>. <code>ToString()</code> →
+            <code>"firmware X, color space N"</code> or <code>"unknown firmware, color space N"</code> (the
+            <code>colorSpace</code> integer hole renders invariant).</li>
+        <li><strong>Equality.</strong> All three hold only value types, <code>string</code>s,
+            <code>DateTimeOffset?</code> and <code>char?</code> — so the compiler-generated record equality is
+            structurally correct; no custom override (contrast M6/M7's array overrides).</li>
+        <li><strong>Signedness.</strong> <code>Timestamp</code> <code>long</code>; <code>ShotOrder</code> is
+            <code>long</code>, widened trap-free from the native <code>uint</code> (see the human-review fixes
+            below); <code>ColorSpace</code> <code>ushort</code>→<code>int</code> and <code>altitudeRef</code>
+            <code>sbyte</code>→<code>int</code> are implicit widenings.</li>
+        <li><strong>Folders.</strong> Only <code>Metadata/</code> was created under each project (it has files),
+            matching the M1–M8 convention of folders appearing with their first files.</li>
+        <li><strong>Forward note for M10.</strong> The GPS accessor calls <code>RAWGPSInfo.FromNative</code>
+            (nullable), so the public GPS accessor is itself nullable.</li>
+    </ul>
+    <p><strong>Human-review fixes (findings #1 and #2).</strong> Per the review, the two <em>Low</em> robustness
+    findings were addressed rather than deferred: (1) the native <code>time_t</code> is now routed through a private
+    <code>TimestampFromUnixSeconds</code> guard that returns <code>null</code> for a zero <em>or</em> out-of-range
+    value (bounded by <code>DateTimeOffset.MinValue</code>/<code>MaxValue</code>'s Unix seconds), so a corrupt
+    timestamp no longer throws — restoring the source's non-throwing tolerance; and (2) <code>ShotOrder</code> is now
+    <code>long</code>, widened trap-free from the native <code>uint</code> to hold its full range (matching the
+    source's 64-bit <code>Int</code>), superseding the earlier M5-style <code>int</code> narrowing. A test pinning the
+    out-of-range→<code>null</code> behaviour was added: now 104 tests, 0 warnings, green in both configurations.
+    Findings #3 (cosmetic whole-number coordinate rendering) and #4 (doc wording) were left as-is.</p>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent; it read all six files plus the three SwiftRAW originals, the four
+    interop structs, both helpers, the Swift tests and the project settings, and <em>empirically</em> confirmed the
+    rounding mode, the <code>DateTimeOffset</code> range behaviour, the shortest-round-trip <code>double</code>
+    rendering, and the checked-narrowing traps; it built clean and ran the suite green — 103 tests). Outcome:
+    <strong>converged — no Critical/High/Medium findings; no M1–M8 regression</strong> (the changes are purely
+    additive).</p>
+    <ul>
+        <li><strong>Out-of-range <code>time_t</code> throws on malformed input</strong> — <em>Low</em> —
+            <code>DateTimeOffset.FromUnixTimeSeconds</code> throws <code>ArgumentOutOfRangeException</code> for a
+            garbage 64-bit timestamp (year &lt; 0001 or &gt; 9999), where the source's
+            <code>Date( timeIntervalSince1970: )</code> tolerates it; only reachable on pathological/corrupt files
+            (cameras write sane values). The null-when-0 semantics themselves are correct. <strong>Deferred</strong> —
+            surfaced for the user; a guard/clamp would restore the source's non-throwing tolerance (relevant to
+            M10's public accessors).</li>
+        <li><strong><code>(int)ShotOrder</code> narrows a <code>uint</code> under checked arithmetic</strong> —
+            <em>Low</em> — a <code>shot_order &gt; int.MaxValue</code> from a corrupt file would trap, and the field
+            cannot represent the full native range the source's 64-bit <code>Int</code> can. This exactly mirrors the
+            established M5 convention (<code>(int)RawCount</code>/<code>DngVersion</code>) — consistent with the
+            codebase, <strong>not a regression</strong>. <strong>Deferred</strong> — kept <code>int</code> for M5
+            consistency (<code>shot_order</code> is a small burst counter).</li>
+        <li><strong>Whole-number latitude/longitude render without a trailing decimal</strong> — <em>Low</em> — C#'s
+            shortest-round-trip renders <code>48.0</code> as <code>"48"</code> where the source renders
+            <code>"48.0"</code>; only differs for exact-integer coordinates (unrealistic for real DMS→decimal
+            results), altitude is unaffected, and the culture-invariance itself is correct. <strong>Deferred</strong> —
+            cosmetic, consistent with prior accepted description nuances.</li>
+        <li><strong><code>CharacterFromByte</code> doc slightly overstates "non-printing"</strong> — <em>Info</em> —
+            the <code>&lt;returns&gt;</code> wording (copied from the source doc) says null is returned for
+            non-printing bytes, but the guard is only <code>value &lt;= 0</code>, so a positive control byte is still
+            returned; the behaviour is a correct, faithful port. <strong>Deferred</strong> — optional doc reword.</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <ol>
+        <li><strong>Fix automated-review findings #1 and #2.</strong> Address the two <em>Low</em> robustness
+            findings rather than deferring them: (1) an out-of-range native <code>time_t</code> must not throw from
+            the timestamp conversion, restoring the source's non-throwing tolerance; and (2) <code>ShotOrder</code>
+            must not narrow the native <code>uint</code> under checked arithmetic. <em>(Applied — an out-of-range or
+            zero timestamp now resolves to <code>null</code>, and <code>ShotOrder</code> is widened to
+            <code>long</code> so it holds the full native range trap-free, matching the source's 64-bit
+            <code>Int</code>. Findings #3/#4 were left as-is.)</em></li>
+        <li><strong>Approved.</strong> After the two fixes, the milestone was approved ("looks good") — no further
+            change requests. Findings #3 (cosmetic whole-number coordinate rendering) and #4 (doc wording) were
+            accepted as-is.</li>
+    </ol>
 </div>
 
 <div class="phase-banner">Phase 4 · File orchestration</div>
