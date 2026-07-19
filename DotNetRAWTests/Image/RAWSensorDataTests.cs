@@ -24,12 +24,15 @@
 
 using System;
 using System.Globalization;
+using System.Linq;
 using DotNetRAW;
 
 namespace DotNetRAWTests;
 
 /// <summary>
-/// Unit tests for <see cref="RAWSensorData"/>.
+/// Unit tests for <see cref="RAWSensorData"/> and the raw-buffer accessors on
+/// <see cref="RAWFile"/>, including a fixture-driven geometry check against real
+/// RAW samples.
 /// </summary>
 public class RAWSensorDataTests
 {
@@ -149,6 +152,38 @@ public class RAWSensorDataTests
         Assert.Equal( 6000,  sensor.Width );
         Assert.Equal( 4000,  sensor.Height );
         Assert.Equal( 12000, sensor.Pitch );
+    }
+
+    /// <summary>
+    /// For real Bayer samples the copied buffer and the borrowed zero-copy view agree,
+    /// match the sensor geometry, and carry non-trivial data. A non-Bayer layout exposes
+    /// no 16-bit Bayer buffer.
+    /// </summary>
+    /// <param name="path">The fixture path.</param>
+    [ Theory ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
+    public void RawImageMatchesGeometry( string path )
+    {
+        using RAWFile file   = new RAWFile( path );
+        RAWSensorData sensor = file.SensorData;
+
+        if( sensor.BufferLayout != RAWSensorData.Layout.Bayer )
+        {
+            Assert.Null( file.RawImage );
+
+            return;
+        }
+
+        ushort[]? image = file.RawImage;
+
+        Assert.NotNull( image );
+        Assert.NotEmpty( image );
+        Assert.Equal( sensor.Height * ( sensor.Pitch / 2 ), image.Length );
+        Assert.True( image.Max() > 0 );
+
+        int viewLength = file.WithRawImage( samples => samples.Length );
+
+        Assert.Equal( image.Length, viewLength );
     }
 
     /// <summary>

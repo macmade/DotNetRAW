@@ -27,7 +27,8 @@ using DotNetRAW;
 namespace DotNetRAWTests;
 
 /// <summary>
-/// Unit tests for <see cref="RAWCFAPattern"/> colour lookups and equality.
+/// Unit tests for <see cref="RAWCFAPattern"/> colour lookups and equality, plus a
+/// fixture-driven consistency check against real RAW samples.
 /// </summary>
 public class RAWCFAPatternTests
 {
@@ -210,5 +211,21 @@ public class RAWCFAPatternTests
     {
         Assert.Equal( new RAWCFAPattern( 0x94949494u, "RGBG" ), new RAWCFAPattern( 0x94949494u, "RGBG" ) );
         Assert.NotEqual( new RAWCFAPattern( 0x94949494u, "RGBG" ), new RAWCFAPattern( 0x61616161u, "RGBG" ) );
+    }
+
+    /// <summary>
+    /// The CFA pattern read off a real file is consistent with the raw identification
+    /// metadata it is derived from.
+    /// </summary>
+    /// <param name="path">The fixture path.</param>
+    [ Theory ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
+    public void CfaPatternMatchesImageInfo( string path )
+    {
+        using RAWFile file = new RAWFile( path );
+        RAWCFAPattern cfa  = file.CfaPattern;
+
+        Assert.Equal( file.ImageInfo.Filters, cfa.Filters );
+        Assert.Equal( file.ImageInfo.ColorDescription, cfa.ColorDescription );
     }
 }

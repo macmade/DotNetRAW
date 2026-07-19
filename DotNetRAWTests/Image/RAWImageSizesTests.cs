@@ -28,7 +28,8 @@ using DotNetRAW;
 namespace DotNetRAWTests;
 
 /// <summary>
-/// Unit tests for <see cref="RAWImageSizes"/>.
+/// Unit tests for <see cref="RAWImageSizes"/>, plus fixture-driven sanity checks
+/// against real RAW samples.
 /// </summary>
 public class RAWImageSizesTests
 {
@@ -101,5 +102,27 @@ public class RAWImageSizesTests
         Assert.Equal( 12000, sizes.RawPitch );
         Assert.Equal( 1.5,   sizes.PixelAspect );
         Assert.Equal( 5,     sizes.Flip );
+    }
+
+    /// <summary>
+    /// For real samples the image sizes are populated and internally consistent: the
+    /// visible output fits within the full sensor dimensions and the pixel aspect is
+    /// positive.
+    /// </summary>
+    /// <param name="path">The fixture path.</param>
+    [ Theory ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
+    public void ImageSizesAreSane( string path )
+    {
+        using RAWFile file  = new RAWFile( path );
+        RAWImageSizes sizes = file.ImageSizes;
+
+        Assert.True( sizes.RawWidth > 0 );
+        Assert.True( sizes.RawHeight > 0 );
+        Assert.True( sizes.Width > 0 );
+        Assert.True( sizes.Height > 0 );
+        Assert.True( sizes.Width <= sizes.RawWidth );
+        Assert.True( sizes.Height <= sizes.RawHeight );
+        Assert.True( sizes.PixelAspect > 0 );
     }
 }

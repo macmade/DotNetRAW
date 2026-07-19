@@ -29,7 +29,8 @@ using DotNetRAW;
 namespace DotNetRAWTests;
 
 /// <summary>
-/// Unit tests for <see cref="RAWLensInfo"/>, including the composed sub-records.
+/// Unit tests for <see cref="RAWLensInfo"/>, including the composed sub-records, plus
+/// a fixture-driven check that lens metadata reads safely from real RAW samples.
 /// </summary>
 public class RAWLensInfoTests
 {
@@ -132,6 +133,25 @@ public class RAWLensInfoTests
         Assert.Equal( RAWMakerNoteLensInfo.FocalType.Zoom, info.MakerNotes.LensFocalType );
         Assert.Equal( 24.0f,                               info.Dng.MinFocal );
         Assert.Equal( 70.0f,                               info.Dng.MaxFocal );
+    }
+
+    /// <summary>
+    /// For real samples the lens metadata reads without crashing and its focal values,
+    /// including the composed maker-note and DNG sub-records, are non-negative.
+    /// </summary>
+    /// <param name="path">The fixture path.</param>
+    [ Theory ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
+    public void LensInfoIsReadable( string path )
+    {
+        using RAWFile file = new RAWFile( path );
+        RAWLensInfo   lens = file.LensInfo;
+
+        Assert.True( lens.MinFocal >= 0 );
+        Assert.True( lens.MaxFocal >= 0 );
+        Assert.True( lens.FocalLengthIn35mmFormat >= 0 );
+        Assert.True( lens.Dng.MinFocal >= 0 );
+        Assert.True( lens.MakerNotes.MinFocal >= 0 );
     }
 
     /// <summary>

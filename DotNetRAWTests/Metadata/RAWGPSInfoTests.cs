@@ -30,7 +30,8 @@ namespace DotNetRAWTests;
 
 /// <summary>
 /// Unit tests for <see cref="RAWGPSInfo"/> coordinate conversion, the failable
-/// factory, and the description.
+/// factory, and the description, plus a fixture-driven check that reading GPS from a
+/// real RAW sample is always safe.
 /// </summary>
 public class RAWGPSInfoTests
 {
@@ -196,6 +197,24 @@ public class RAWGPSInfoTests
         finally
         {
             CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    /// <summary>
+    /// Reading GPS from a real file never crashes and is absent when the file records no
+    /// GPS; when present, the coordinates fall within their valid ranges.
+    /// </summary>
+    /// <param name="path">The fixture path.</param>
+    [ Theory ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
+    public void GpsInfoIsSafeToRead( string path )
+    {
+        using RAWFile file = new RAWFile( path );
+
+        if( file.GpsInfo is RAWGPSInfo gps )
+        {
+            Assert.InRange( gps.Latitude, -90.0, 90.0 );
+            Assert.InRange( gps.Longitude, -180.0, 180.0 );
         }
     }
 }

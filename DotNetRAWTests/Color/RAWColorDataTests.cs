@@ -29,7 +29,8 @@ using DotNetRAW;
 namespace DotNetRAWTests;
 
 /// <summary>
-/// Unit tests for <see cref="RAWColorData"/>.
+/// Unit tests for <see cref="RAWColorData"/>, plus a fixture-driven check that the
+/// multiplier arrays and colour matrices have the expected shapes for real samples.
 /// </summary>
 public class RAWColorDataTests
 {
@@ -144,6 +145,34 @@ public class RAWColorDataTests
         Assert.NotEqual( first, With( first, cameraMultipliers: [ 1, 2, 3, 99 ] ) );
         Assert.NotEqual( first, With( first, rgbCamera: [ [ 10, 11, 12, 13 ], [ 14, 15, 16, 17 ], [ 18, 19, 20, 99 ] ] ) );
         Assert.NotEqual( first, With( first, cameraXyz: [ [ 30, 31, 32 ], [ 33, 34, 35 ], [ 36, 37, 38 ], [ 39, 40, 99 ] ] ) );
+    }
+
+    /// <summary>
+    /// For real samples the multiplier arrays and colour matrices have the expected
+    /// shapes and the saturation level is populated.
+    /// </summary>
+    /// <param name="path">The fixture path.</param>
+    [ Theory ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
+    public void ColorArraysHaveExpectedShape( string path )
+    {
+        using RAWFile file  = new RAWFile( path );
+        RAWColorData  color = file.ColorData;
+
+        Assert.Equal( 4, color.CameraMultipliers.Length );
+        Assert.Equal( 4, color.PreMultipliers.Length );
+        Assert.Equal( 4, color.ChannelBlackLevels.Length );
+
+        Assert.Equal( 3, color.RgbCamera.Length );
+        Assert.All( color.RgbCamera, row => Assert.Equal( 4, row.Length ) );
+
+        Assert.Equal( 4, color.CameraXyz.Length );
+        Assert.All( color.CameraXyz, row => Assert.Equal( 3, row.Length ) );
+
+        Assert.Equal( 3, color.ColorMatrix.Length );
+        Assert.All( color.ColorMatrix, row => Assert.Equal( 4, row.Length ) );
+
+        Assert.True( color.Maximum > 0 );
     }
 
     /// <summary>

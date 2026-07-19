@@ -29,7 +29,8 @@ using DotNetRAW;
 namespace DotNetRAWTests;
 
 /// <summary>
-/// Unit tests for <see cref="RAWCameraMetadata"/>.
+/// Unit tests for <see cref="RAWCameraMetadata"/>, plus a fixture-driven check that the
+/// camera-common maker-note metadata reads safely from real RAW samples.
 /// </summary>
 public class RAWCameraMetadataTests
 {
@@ -113,6 +114,23 @@ public class RAWCameraMetadataTests
         Assert.Equal( "1.3.3", meta.Firmware );
         Assert.Equal( 102.0f, meta.RealISO );
         Assert.Equal( 100.0f, meta.ExposureIndex );
+    }
+
+    /// <summary>
+    /// For real samples the camera metadata reads without crashing: the colour space is
+    /// non-negative and the numeric fields are not NaN.
+    /// </summary>
+    /// <param name="path">The fixture path.</param>
+    [ Theory ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
+    public void CameraMetadataIsReadable( string path )
+    {
+        using RAWFile     file = new RAWFile( path );
+        RAWCameraMetadata meta = file.CameraMetadata;
+
+        Assert.True( meta.ColorSpace >= 0 );
+        Assert.False( float.IsNaN( meta.RealISO ) );
+        Assert.False( float.IsNaN( meta.CameraTemperature ) );
     }
 
     /// <summary>

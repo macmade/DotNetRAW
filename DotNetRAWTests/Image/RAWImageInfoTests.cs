@@ -29,7 +29,8 @@ using DotNetRAW;
 namespace DotNetRAWTests;
 
 /// <summary>
-/// Unit tests for <see cref="RAWImageInfo"/>.
+/// Unit tests for <see cref="RAWImageInfo"/>, plus a fixture-driven check that the
+/// camera identity is populated for real RAW samples.
 /// </summary>
 public class RAWImageInfoTests
 {
@@ -148,6 +149,22 @@ public class RAWImageInfoTests
         };
 
         Assert.True( new RAWImageInfo( native ).IsFoveon );
+    }
+
+    /// <summary>
+    /// For real samples the camera make, model and colour count are populated.
+    /// </summary>
+    /// <param name="path">The fixture path.</param>
+    [ Theory ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
+    public void ImageInfoIsPopulated( string path )
+    {
+        using RAWFile file = new RAWFile( path );
+        RAWImageInfo  info = file.ImageInfo;
+
+        Assert.False( string.IsNullOrEmpty( info.Make ) );
+        Assert.False( string.IsNullOrEmpty( info.Model ) );
+        Assert.True( info.Colors > 0 );
     }
 
     /// <summary>

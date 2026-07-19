@@ -344,7 +344,7 @@
     </ol>
     <div class="phase">Phase 5 · Integration &amp; finalization</div>
     <ol>
-        <li><span class="id">M11</span><a href="#m11">Integration tests &amp; sample-file parity</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M11</span><a href="#m11">Integration tests &amp; sample-file parity</a><span class="status completed">Completed</span></li>
         <li><span class="id">M12</span><a href="#m12">Finalization — clean build, README, CI parity</a><span class="status not-started">Not started</span></li>
         <li><span class="id">M13</span><a href="#m13">NuGet package — bundle native binaries for all supported RIDs</a><span class="status not-started">Not started</span></li>
     </ol>
@@ -1194,7 +1194,7 @@
 <div class="phase-banner">Phase 5 · Integration &amp; finalization</div>
 
 <div class="milestone" id="m11">
-    <div class="head"><h3>M11 — Integration tests &amp; sample-file parity</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M11 — Integration tests &amp; sample-file parity</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Wire the fixture-parameterised tests to the real CR3 sample and assert cross-type consistency and
     behavioural parity with SwiftRAW end to end.</p>
@@ -1205,11 +1205,85 @@
         <li>Port <code>DescriptionsTests</code>' fixture-driven portions.</li>
         <li>Confirm behaviour matches SwiftRAW on the CR3 (metadata values, description shape), adapting only where a difference is a legitimate language-runtime convention.</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Built TDD-style. Because the production surface (<code>RAWFile</code> and every accessor) already exists
+    from M10, the loop for this test-authoring milestone is: write each fixture-driven <code>[ Theory ]</code>,
+    run it against the real <code>Test&#160;Files/0H8A0311.CR3</code>, and confirm parity (a failing assertion
+    would signal a port bug). Green in <strong>both Debug and Release</strong>: <strong>126 tests</strong>, 0
+    warnings. The 16 fixture theories each resolve to the single CR3 case (verified by running one in
+    isolation), so the whole open&#8594;accessor pipeline is exercised end to end on the 33&#160;MB sample.</p>
+    <ul>
+        <li><strong>Structure — per-type, matching the source and the M10 precedent.</strong> SwiftRAW keeps its
+            fixture-driven tests (<code>arguments: rawFileURLs</code>) in each type's own test file, and M10
+            already placed its fixture theories in <code>RAWFileTests.cs</code>. So each remaining fixture check
+            is ported into the corresponding DotNetRAW per-type test file rather than a single
+            <code>IntegrationTests.cs</code> (the sibling DotNetFITS's <code>IntegrationTests.cs</code> is
+            build-from-scratch round-trips, for which a read-only RAW reader has no analogue). The two
+            fixture-driven tests from the source's <code>DescriptionsTests</code> go into a new
+            <code>DescriptionsTests.cs</code> — the per-value description tests were already folded per-type in
+            M5–M9, leaving only the fixture-driven remainder.</li>
+        <li><strong>Shared fixture source.</strong> Added <code>TestUtilities.RawFiles</code>
+            (<code>IEnumerable&lt; object[] &gt;</code> wrapping <code>RawFileUrls</code>) as the single
+            <code>[ MemberData ]</code> source, consumed via
+            <code>[ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]</code>.
+            This satisfies M11's "wire the <code>[ Theory ]</code> fixture source" task in one place and honours
+            the avoid-duplication convention. M10's <code>RAWFileTests.cs</code> was rewired to use it — its local
+            duplicate <code>RawFiles</code> property and the then-unused <code>System.Collections.Generic</code> /
+            <code>System.Linq</code> usings were removed; all six of its pre-existing theories still bind and pass
+            (no regression).</li>
+        <li><strong>Ported checks (one per source fixture test):</strong> <code>ImageSizesAreSane</code>
+            (<code>Width ≤ RawWidth</code>, positive geometry/aspect — resolves the M5 forward note),
+            <code>ImageInfoIsPopulated</code> (make/model/colours), <code>CfaPatternMatchesImageInfo</code>
+            (<code>Filters</code>/<code>ColorDescription</code> vs <code>ImageInfo</code>),
+            <code>ColorArraysHaveExpectedShape</code> (4/4/4, 3×4/4×3/3×4, <code>Maximum &gt; 0</code> — resolves
+            the M7 forward note), <code>RawImageMatchesGeometry</code> (<code>RawImage.Length == Height×(Pitch/2)</code>,
+            <code>Max &gt; 0</code>, view length equals copy, null buffer for non-Bayer),
+            <code>LensInfoIsReadable</code>, <code>ExposureValuesAreSane</code>,
+            <code>CameraMetadataIsReadable</code>, <code>GpsInfoIsSafeToRead</code>,
+            <code>FileDescriptionIsRich</code> (non-empty and contains <code>×</code>), and
+            <code>FixtureDiscoveryIsConsistent</code> (resolves the M3 forward note).</li>
+        <li><strong>Already covered in M10.</strong> The source's <code>Core/RAWFileTests</code> fixture tests
+            (open eager/lazy/from-bytes) and the raw-buffer view-vs-copy agreement were ported in M10;
+            <code>RawImageMatchesGeometry</code> adds only the geometry-exactness and <code>Max &gt; 0</code>
+            checks — a small, intentional overlap kept because the source places them in
+            <code>RAWSensorDataTests</code>.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent). It independently built and ran the suite in Debug <em>and</em>
+    Release (<strong>126 / 126 green, 0 warnings</strong>), ran a fixture theory in isolation to confirm the
+    theories drive a real case against the CR3 (not zero cases), cross-checked every ported assertion against
+    both the source fixture tests and the production accessors/record types, verified nullability under
+    <code>Nullable=enable</code> and the value-type <code>WithRawImage</code> return, and checked that removing
+    M10's local <code>RawFiles</code> and its two usings introduced no regression (all pre-existing theories
+    still resolve and pass). Outcome: <strong>converged — no Critical/High/Medium findings; no M1–M10
+    regression.</strong></p>
+    <ul>
+        <li><strong>Some fixture assertions are structurally tautological</strong> — <em>Info</em> — the colour
+            array/matrix <em>shape</em> checks are fixed by the interop <code>SizeConst</code> regardless of file
+            content; <code>CfaPatternMatchesImageInfo</code> compares two accessors that read the same
+            <code>LibRawIParams</code> fields; and <code>FixtureDiscoveryIsConsistent</code> compares two forms of
+            the same expression (<code>HasTestFiles</code> <em>is</em> <code>RawFileUrls.Count &gt; 0</code>).
+            These are faithful verbatim ports of the source tests; the content-dependent checks in the same
+            methods (<code>Maximum &gt; 0</code>, <code>Width ≤ RawWidth</code>, the sensor geometry/<code>Max</code>,
+            the exposure/lens/GPS ranges) carry the real weight. <strong>Deferred</strong> (no action; parity).</li>
+        <li><strong>Single-fixture branch coverage</strong> — <em>Low</em> — the one sample is Bayer with no GPS,
+            so <code>RawImageMatchesGeometry</code>'s non-Bayer null-buffer branch and
+            <code>GpsInfoIsSafeToRead</code>'s in-range assertions are asserted by code shape but not executed.
+            Expected for a curated one-file fixture set and matches the source exactly; a non-Bayer or geotagged
+            sample would exercise them in a future pass. <strong>Deferred</strong> (no action).</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <p>Approved as implemented ("looks good") — no change requests. The two decisions surfaced for review were
+    accepted: (1) placing the fixture-driven tests per-type (matching the source layout and the M10 precedent)
+    rather than in a single <code>IntegrationTests.cs</code>, with the two description/discovery fixture tests in
+    a new <code>DescriptionsTests.cs</code>; and (2) the shared <code>TestUtilities.RawFiles</code>
+    <code>[ MemberData ]</code> source, including rewiring M10's <code>RAWFileTests.cs</code> to it (removing that
+    file's local duplicate <code>RawFiles</code> property and its then-unused
+    <code>System.Collections.Generic</code> / <code>System.Linq</code> usings). The two automated-review findings
+    — the structurally tautological assertions (<em>Info</em>) and the single-fixture branch coverage
+    (<em>Low</em>) — were surfaced and accepted as-is.</p>
 </div>
 
 <div class="milestone" id="m12">

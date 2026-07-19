@@ -70,6 +70,17 @@ public static class TestUtilities
     public static bool HasTestFiles => RawFileUrls.Count > 0;
 
     /// <summary>
+    /// The RAW fixture files wrapped as xUnit theory data - one file path per case -
+    /// for the fixture-driven <c>[ Theory ]</c> methods that consume them through
+    /// <c>[ MemberData ]</c>.
+    /// </summary>
+    /// <remarks>
+    /// Yields no cases when no fixtures are present, so fixture-driven theories simply
+    /// run nothing rather than failing.
+    /// </remarks>
+    public static IEnumerable< object[] > RawFiles => RawFileUrls.Select( path => new object[] { path } );
+
+    /// <summary>
     /// Resolves <see cref="RawFileUrls"/> relative to this source file's location.
     /// </summary>
     /// <param name="sourceFilePath">

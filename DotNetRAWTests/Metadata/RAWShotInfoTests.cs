@@ -31,7 +31,8 @@ namespace DotNetRAWTests;
 
 /// <summary>
 /// Unit tests for <see cref="RAWShotInfo"/>, including the reciprocal-shutter
-/// formatting and the timestamp handling.
+/// formatting and the timestamp handling, plus a fixture-driven check that exposure
+/// values read sanely from real RAW samples.
 /// </summary>
 public class RAWShotInfoTests
 {
@@ -200,6 +201,24 @@ public class RAWShotInfoTests
         RAWShotInfo shot = new RAWShotInfo( other, shooting );
 
         Assert.Null( shot.Timestamp );
+    }
+
+    /// <summary>
+    /// For real samples the exposure values are non-negative and read without crashing.
+    /// </summary>
+    /// <param name="path">The fixture path.</param>
+    [ Theory ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
+    public void ExposureValuesAreSane( string path )
+    {
+        using RAWFile file = new RAWFile( path );
+        RAWShotInfo   shot = file.ShotInfo;
+
+        Assert.True( shot.IsoSpeed >= 0 );
+        Assert.True( shot.ShutterSpeed >= 0 );
+        Assert.True( shot.Aperture >= 0 );
+        Assert.True( shot.FocalLength >= 0 );
+        Assert.True( shot.ShotOrder >= 0 );
     }
 
     /// <summary>

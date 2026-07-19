@@ -23,10 +23,8 @@
  ******************************************************************************/
 
 using System;
-using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using DotNetRAW;
 
 namespace DotNetRAWTests;
@@ -41,11 +39,6 @@ namespace DotNetRAWTests;
 /// </remarks>
 public class RAWFileTests
 {
-    /// <summary>
-    /// The fixture RAW files, wrapped for <c>[ Theory ]</c> consumption.
-    /// </summary>
-    public static IEnumerable< object[] > RawFiles => TestUtilities.RawFileUrls.Select( path => new object[] { path } );
-
     /// <summary>
     /// Opening a path that does not exist reports an invalid file location.
     /// </summary>
@@ -135,7 +128,7 @@ public class RAWFileTests
     /// </summary>
     /// <param name="path">The fixture path.</param>
     [ Theory ]
-    [ MemberData( nameof( RawFiles ) ) ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
     public void OpensEagerlyWithNonEmptyDescription( string path )
     {
         using RAWFile file = new RAWFile( path );
@@ -149,7 +142,7 @@ public class RAWFileTests
     /// </summary>
     /// <param name="path">The fixture path.</param>
     [ Theory ]
-    [ MemberData( nameof( RawFiles ) ) ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
     public void OpensLazilyAndUnpacksIdempotently( string path )
     {
         using RAWFile file = new RAWFile( path, new RAWParsingOptions( false ) );
@@ -165,7 +158,7 @@ public class RAWFileTests
     /// </summary>
     /// <param name="path">The fixture path.</param>
     [ Theory ]
-    [ MemberData( nameof( RawFiles ) ) ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
     public void OpensFromBytesWithNonEmptyDescription( string path )
     {
         byte[] bytes = File.ReadAllBytes( path );
@@ -181,7 +174,7 @@ public class RAWFileTests
     /// </summary>
     /// <param name="path">The fixture path.</param>
     [ Theory ]
-    [ MemberData( nameof( RawFiles ) ) ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
     public void RawImageCopyAndViewAgree( string path )
     {
         using RAWFile file = new RAWFile( path );
@@ -203,7 +196,7 @@ public class RAWFileTests
     /// </summary>
     /// <param name="path">The fixture path.</param>
     [ Theory ]
-    [ MemberData( nameof( RawFiles ) ) ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
     public void AccessorsThrowAfterDispose( string path )
     {
         RAWFile file = new RAWFile( path );
@@ -219,7 +212,7 @@ public class RAWFileTests
     /// </summary>
     /// <param name="path">The fixture path.</param>
     [ Theory ]
-    [ MemberData( nameof( RawFiles ) ) ]
+    [ MemberData( nameof( TestUtilities.RawFiles ), MemberType = typeof( TestUtilities ) ) ]
     public void ToStringReturnsSentinelAfterDispose( string path )
     {
         RAWFile file = new RAWFile( path );
