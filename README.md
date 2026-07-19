@@ -2,6 +2,7 @@ DotNetRAW
 =========
 
 [![Build Status](https://img.shields.io/github/actions/workflow/status/macmade/DotNetRAW/ci-win.yaml?label=Windows&logo=dotnet)](https://github.com/macmade/DotNetRAW/actions/workflows/ci-win.yaml)
+[![NuGet](https://img.shields.io/nuget/v/DotNetRAW.svg?logo=nuget)](https://www.nuget.org/packages/DotNetRAW)
 [![Issues](http://img.shields.io/github/issues/macmade/DotNetRAW.svg?logo=github)](https://github.com/macmade/DotNetRAW/issues)
 ![Status](https://img.shields.io/badge/status-active-brightgreen.svg?logo=git)
 ![License](https://img.shields.io/badge/license-mit-brightgreen.svg?logo=open-source-initiative)  
@@ -61,6 +62,21 @@ The correct native binary is copied next to your application automatically and r
 at run time by import name. The library is continuously built and tested on Windows (see
 the CI badge above) in both Debug and Release configurations, and developed and tested on
 macOS.
+
+### Installation
+
+DotNetRAW is available on [NuGet](https://www.nuget.org/packages/DotNetRAW). Add it to your project
+with the .NET CLI:
+
+```bash
+dotnet add package DotNetRAW
+```
+
+Or add a `<PackageReference>` to your project file:
+
+```xml
+<PackageReference Include="DotNetRAW" Version="1.0.0" />
+```
 
 ### Building
 
