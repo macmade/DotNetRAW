@@ -88,6 +88,25 @@ internal static partial class LibRaw
     internal static partial int libraw_open_file( IntPtr context, string fileName );
 
     /// <summary>
+    /// Opens a RAW file at the given wide-character path into the context.
+    /// </summary>
+    /// <remarks>
+    /// The Windows-only counterpart of <see cref="libraw_open_file"/>, taking a
+    /// <c>const wchar_t*</c> (UTF-16) path. It is used on Windows so a non-ASCII path
+    /// is not mangled by the narrow CRT that <see cref="libraw_open_file"/>'s UTF-8
+    /// path would pass through; macOS and Linux keep the UTF-8 entry point.
+    /// </remarks>
+    /// <param name="context">The context returned by <see cref="libraw_init"/>.</param>
+    /// <param name="fileName">The path to the RAW file, marshaled as UTF-16.</param>
+    /// <returns>
+    /// <c>LIBRAW_SUCCESS</c> (<c>0</c>) on success, or a negative
+    /// <see cref="LibRawError"/> code on failure.
+    /// </returns>
+    [ UnmanagedCallConv( CallConvs = new[] { typeof( CallConvCdecl ) } ) ]
+    [ LibraryImport( LibraryName, StringMarshalling = StringMarshalling.Utf16 ) ]
+    internal static partial int libraw_open_wfile( IntPtr context, string fileName );
+
+    /// <summary>
     /// Opens a RAW image held entirely in memory into the context.
     /// </summary>
     /// <remarks>

@@ -340,7 +340,7 @@
     </ol>
     <div class="phase">Phase 4 · File orchestration</div>
     <ol>
-        <li><span class="id">M10</span><a href="#m10">RAWFile — open, unpack, accessors &amp; disposal</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M10</span><a href="#m10">RAWFile — open, unpack, accessors &amp; disposal</a><span class="status completed">Completed</span></li>
     </ol>
     <div class="phase">Phase 5 · Integration &amp; finalization</div>
     <ol>
@@ -1062,7 +1062,7 @@
 <div class="phase-banner">Phase 4 · File orchestration</div>
 
 <div class="milestone" id="m10">
-    <div class="head"><h3>M10 — RAWFile: open, unpack, accessors &amp; disposal</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M10 — RAWFile: open, unpack, accessors &amp; disposal</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Port the public entry point that ties the interop layer and every value type together: opening,
     unpacking, all metadata accessors, the raw pixel buffer, description, and deterministic native cleanup.</p>
@@ -1079,11 +1079,116 @@
         <li><code>Dispose</code>/finalizer via the <code>SafeHandle</code>; throw <code>ObjectDisposedException</code> from accessors after disposal.</li>
         <li>Tests: port <code>RAWFileTests</code> — invalid (non-file) URL → invalid-file-URL; nonexistent path → cannot-read-file; garbage/empty bytes → <code>RAWException</code>; eager open, lazy open + idempotent <code>Unpack</code>, open-from-bytes, each asserting a non-empty description. Gate any file-permission-based test to non-Windows (mirrors DotNetFITS).</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Built TDD-style: <code>RAWFileTests</code> (error cases plus fixture-driven <code>[ Theory ]</code> tests over
+    the real <code>Test&#160;Files/0H8A0311.CR3</code>) were written first and watched fail to compile, then
+    <code>RAWFile</code> was implemented to green. <code>RAWFile</code> lives in <code>DotNetRAW/Core/</code>; tests in
+    <code>DotNetRAWTests/Core/</code>. Green in <strong>both Debug and Release</strong>: 114 tests (10 new), 0
+    warnings. The fixture theories exercise the whole open&#8594;unpack&#8594;accessors&#8594;description&#8594;raw-buffer&#8594;dispose
+    pipeline end to end on the 33&#160;MB CR3.</p>
+    <ul>
+        <li><strong>Open API — a maintainer decision (chosen interactively).</strong> The public open API takes a
+            <strong><code>string path</code> (like the DotNetFITS sibling), not a <code>Uri</code></strong>.
+            Consequently a missing path or a directory → <code>InvalidFileURL</code>, and an existing-but-unreadable
+            file → <code>CannotReadFile</code>; there is no non-file-URL case. This deviates from SwiftRAW's
+            <code>URL</code> model and from the plan's original "nonexistent → cannot-read-file" test wording, per the
+            maintainer's explicit choice — the M10 test bullet above is read against that decision.</li>
+        <li><strong>Constructors.</strong> Four public constructors — <code>RAWFile( path )</code>/
+            <code>RAWFile( path, options )</code> and <code>RAWFile( bytes )</code>/<code>RAWFile( bytes, options )</code>;
+            the no-options overloads delegate to <code>RAWParsingOptions.Default</code> (eager), never
+            <code>= default</code> (which would be lazy — M4 forward note).</li>
+        <li><strong>Open &amp; classify.</strong> The path opens through <code>libraw_open_file</code>, and through
+            <code>libraw_open_wfile</code> (UTF-16) on Windows so a non-ASCII path is not mangled by the narrow CRT
+            (M2 forward note; the <code>libraw_open_wfile</code> binding was added to the interop). A failure is
+            classified only <em>after</em> the open fails (no time-of-check/time-of-use gap): missing/dir →
+            <code>InvalidFileURL</code>, unreadable → <code>CannotReadFile</code>, <code>FILE_UNSUPPORTED</code> →
+            unsupported-format, else open-failed; messages from <code>libraw_strerror</code>. The bytes path copies
+            the input into an array pinned (<code>GCHandle</code>) and owned for the file's lifetime — LibRAW's
+            <code>open_buffer</code> retains the pointer — then <code>libraw_open_buffer</code>. Both constructors
+            dispose the context and free the pin on <em>any</em> construction failure before throwing.</li>
+        <li><strong>Unpack.</strong> Idempotent (guard flag), disposed-guarded, and eager in the constructor when
+            <code>Options.UnpacksImmediately</code>.</li>
+        <li><strong>Accessors.</strong> Nine metadata accessors build fresh records by marshalling each LibRAW
+            sub-struct from the context base pointer at its <code>LibRawData</code> offset (<code>ImageSizes</code>,
+            <code>ImageInfo</code>, <code>CfaPattern</code>, <code>ShotInfo</code>, <code>GpsInfo?</code>,
+            <code>ColorData</code>, <code>LensInfo</code>, <code>CameraMetadata</code>, <code>SensorData</code>).
+            <code>GpsInfo</code> is nullable (M9 forward note). The four <code>cblack</code> values are read separately;
+            because <code>cblack</code> is an inline array in the flat struct it is always present, so the source's
+            "<code>[]</code> for a null <code>cblack</code>" case never arises — resolving the M7 forward note.</li>
+        <li><strong>Raw pixel access.</strong> <code>RawImage</code> (a <code>ushort[]?</code> copy) and
+            <code>WithRawImage&lt; TResult &gt;( RawImageReader&lt; TResult &gt; )</code> exposing a zero-copy
+            <code>ReadOnlySpan&lt; ushort &gt;</code> of <code>raw_height × (raw_pitch / 2)</code> samples; both are
+            null/default when no 16-bit Bayer buffer is present. A nested <code>RawImageReader&lt; TResult &gt;</code>
+            delegate is used because a <code>ReadOnlySpan</code> (a <code>ref struct</code>) cannot be a
+            <code>Func</code> type argument.</li>
+        <li><strong>Disposal.</strong> <code>IDisposable</code> + finalizer via the <code>LibRawHandle</code>
+            <code>SafeHandle</code>; every member throws <code>ObjectDisposedException</code> after disposal (through a
+            <code>Context()</code> guard). The handle is disposed deterministically on <code>Dispose()</code> and
+            self-finalizes otherwise; the pinned buffer is freed exactly once on every path.</li>
+        <li><strong>ToString.</strong> A rich one-line summary (camera + <code>rawW×rawH</code> + CFA + exposure +
+            lens), invariant <code>×</code> (U+00D7), empty parts filtered — matching the source's description
+            field-for-field. After disposal it returns the sentinel <code>"RAWFile (disposed)"</code> rather than
+            throwing (per human review), so it stays safe to call implicitly while the data accessors keep throwing
+            <code>ObjectDisposedException</code>.</li>
+        <li><strong>Forward notes resolved here:</strong> M2 (Windows <code>libraw_open_wfile</code>), M4 (options
+            default to <code>Default</code>), M7 (<code>cblack</code>), and M9 (nullable GPS accessor).</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>Two review rounds (fresh-context sub-agents; each built clean under <code>TreatWarningsAsErrors</code> and ran
+    the full 114-test suite green in Release, including the fixture theories against the CR3). Outcome:
+    <strong>converged — no Critical/High/Medium findings remain; no M1–M9 regression</strong> (the only tracked-file
+    change is the additive <code>libraw_open_wfile</code> binding).</p>
+    <ul>
+        <li><strong><code>WithRawImage</code> use-after-free window</strong> — <em>Medium</em> — the zero-copy span
+            points into memory owned by the native context, but once the context pointer is captured nothing
+            references the <code>RAWFile</code>, so a GC during the user callback could finalize the
+            <code>SafeHandle</code> (freeing the buffer) mid-read. <strong>Fixed:</strong> added
+            <code>GC.KeepAlive( this )</code> around the callback and, for uniform safety, around the shared native-read
+            helpers (<code>ReadStruct</code>/<code>ReadChannelBlackLevels</code>), since the marshalling dereferences
+            the context at a GC safepoint.</li>
+        <li><strong>Non-deterministic context cleanup if the byte-buffer clone/pin throws</strong> — <em>Low</em> — an
+            OOM in the pre-<code>try</code> clone/<code>GCHandle.Alloc</code> left the context to the finalizer.
+            <strong>Fixed:</strong> moved the clone + pin inside the <code>try</code> so any failure disposes the
+            context and frees the pin. (Round&#160;2 flagged the same asymmetry in the path constructor — also fixed:
+            <code>OpenPath</code> is now wrapped so a marshalling failure disposes the context.)</li>
+        <li><strong>Value-type <code>TResult</code> loses the "no buffer" signal in <code>WithRawImage</code></strong>
+            — <em>Low</em> — for a value-type result the no-buffer case returns <code>default(TResult)</code>, not a
+            true null (an inherent C# unconstrained-generics limitation; the reference-type <code>RawImage</code> path
+            returns proper <code>null</code>). <strong>Deferred</strong> — documented on the member.</li>
+        <li><strong><code>ToString</code> throws <code>ObjectDisposedException</code> after disposal</strong> —
+            <em>Info</em> — flagged as a mild footgun (<code>ToString</code> is called implicitly by debuggers,
+            logging and interpolation). <strong>Fixed</strong> per human review (see Review comments): a disposed
+            <code>RAWFile</code>'s <code>ToString()</code> now returns <code>"RAWFile (disposed)"</code> instead of
+            throwing; the data accessors still throw.</li>
+        <li><strong>Checked-arithmetic casts of native-sourced values</strong> — <em>Info</em> — fail-safe (they throw
+            rather than produce a wrong/out-of-bounds span length) for pathological input, and unreachable for real
+            sensor geometry. <strong>Deferred</strong> (no action).</li>
+        <li><strong><code>libraw_open_wfile</code> binding unverifiable off Windows</strong> — <em>Info</em> — correct
+            by inspection (UTF-16, cdecl, Windows-only call site); the Windows path is exercised by CI (M12).
+            <strong>Deferred</strong>.</li>
+        <li><strong>Minor test-coverage gaps</strong> — <em>Info</em> — the after-dispose case covers one accessor
+            (all share the same guard); the lazy test does not assert the pre-unpack buffer-absence. Deeper fixture
+            parity is M11. <strong>Deferred</strong>.</li>
+        <li><strong>Doc-comment wording nuance on the <code>KeepAlive</code> rationale</strong> — <em>Info</em> (round
+            2) — the comment said the marshalling "allocates" (true only for the non-blittable structs) whereas the
+            native dereference itself is the GC safepoint. <strong>Fixed:</strong> reworded.</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <ol>
+        <li><strong>Question: why does <code>ToString()</code> throw <code>ObjectDisposedException</code> after
+            disposal?</strong> Queried the automated-review Info note that a disposed <code>RAWFile</code>'s
+            <code>ToString()</code> throws rather than returning a string. <em>(Answered in discussion — no code change
+            unless requested.)</em></li>
+        <li><strong>Apply option 2: make <code>ToString()</code> lenient after disposal.</strong> Chose to have a
+            disposed <code>RAWFile</code>'s <code>ToString()</code> return a sentinel rather than throw, so it stays
+            safe to call implicitly (debuggers, logging, string interpolation), while the data accessors keep throwing
+            <code>ObjectDisposedException</code>. <em>(Applied — a disposed-check at the top of <code>ToString()</code>
+            returns <code>"RAWFile (disposed)"</code>; a test pins it.)</em></li>
+        <li><strong>Approved.</strong> After the <code>ToString()</code> change, the milestone was approved
+            ("looks good") — no further change requests.</li>
+    </ol>
 </div>
 
 <div class="phase-banner">Phase 5 · Integration &amp; finalization</div>
