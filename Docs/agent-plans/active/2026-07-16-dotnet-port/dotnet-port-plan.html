@@ -335,7 +335,7 @@
         <li><span class="id">M5</span><a href="#m5">Image geometry &amp; identity</a><span class="status completed">Completed</span></li>
         <li><span class="id">M6</span><a href="#m6">CFA pattern &amp; sensor data</a><span class="status completed">Completed</span></li>
         <li><span class="id">M7</span><a href="#m7">Colour data</a><span class="status completed">Completed</span></li>
-        <li><span class="id">M8</span><a href="#m8">Lens info</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M8</span><a href="#m8">Lens info</a><span class="status completed">Completed</span></li>
         <li><span class="id">M9</span><a href="#m9">Shot, GPS &amp; camera metadata</a><span class="status not-started">Not started</span></li>
     </ol>
     <div class="phase">Phase 4 · File orchestration</div>
@@ -860,7 +860,7 @@
 </div>
 
 <div class="milestone" id="m8">
-    <div class="head"><h3>M8 — Lens info</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M8 — Lens info</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Port the lens-identity records, including the composed maker-note and DNG sub-records.</p>
     <div class="field">Tasks</div>
@@ -870,11 +870,79 @@
         <li><code>RAWLensInfo</code> (sealed record) from <code>libraw_lensinfo_t</code>: focal &amp; aperture floats, lens make/model/serials, focalLengthIn35mmFormat, composing <code>MakerNotes</code> and <code>Dng</code>.</li>
         <li>Tests: <code>FocalType</code> mapping (1/2/0/-1/99), fixture-driven non-negative focal values, DNG description strings.</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Built TDD-style: the three lens test files were written first and watched fail to compile, then the
+    records implemented to green. The three records live in <code>DotNetRAW/Lens/</code>; tests under
+    <code>DotNetRAWTests/Lens/</code>. Green in <strong>both Debug and Release</strong>: 82 tests (13 new), 0
+    warnings.</p>
+    <ul>
+        <li><strong><code>RAWDNGLensInfo</code></strong> (sealed record) — <code>MinFocal</code>/<code>MaxFocal</code>/
+            <code>MaxApertureAtMinFocal</code>/<code>MaxApertureAtMaxFocal</code> (all <code>float</code>). Public
+            memberwise constructor + internal from-native constructor from <code>LibRawDngLens</code>.
+            <code>ToString()</code> → <code>"50mm"</code> when the range is fixed (<code>min == max</code>) or
+            <code>"24–70mm"</code> otherwise (en dash U+2013).</li>
+        <li><strong><code>RAWMakerNoteLensInfo</code></strong> (sealed record) with a nested <code>FocalType</code>
+            enum (<code>Unknown</code>/<code>Fixed</code>/<code>Zoom</code>). Per the M6 nested-enum precedent
+            (<code>CS0102</code> forbids a property sharing a nested type's name), the property is named
+            <strong><code>LensFocalType</code></strong> while the enum stays <code>FocalType</code> (documented on
+            the type). An <code>internal static FocalTypeFromCode( int )</code> maps <code>1</code>→<code>Fixed</code>,
+            <code>2</code>→<code>Zoom</code>, else <code>Unknown</code> — the C# equivalent of the Swift source's
+            <code>FocalType( rawValue: )</code> initialiser, testable through <code>InternalsVisibleTo</code>. The
+            twelve surfaced fields map one-for-one from <code>LibRawMakerNotesLens</code>. <code>ToString()</code>
+            → <code>"model (range)"</code>, or the range alone when the model is empty.</li>
+        <li><strong><code>RAWLensInfo</code></strong> (sealed record) — ten EXIF-level fields plus the composed
+            <code>MakerNotes</code>/<code>Dng</code> sub-records. The from-native constructor takes
+            <strong>three</strong> marshaled structs (<code>LibRawLensInfo</code> + <code>LibRawMakerNotesLens</code>
+            + <code>LibRawDngLens</code>) because M2 models the lens sub-structures separately and reads them from
+            their own offsets (<code>DngLensOffset</code>/<code>MakerNotesLensOffset</code>); M10 marshals all three
+            and calls this constructor. <code>FocalLengthIn35mmFormat</code> is <code>int</code>
+            (<code>ushort</code> widened).</li>
+        <li><strong>Descriptions &amp; culture.</strong> All three <code>ToString()</code>s render numbers only
+            through <code>CompactDescription</code> (invariant); because every interpolation hole is already a
+            <code>string</code>, a plain <code>$"…"</code> is culture-independent — matching M6's plain-interpolation
+            precedent, so no <code>string.Create</code> wrapper is needed. Each type carries the mandated
+            <code>fr-FR</code> culture-swap test using <em>fractional</em> focals (<code>10.5</code>/<code>42.5</code>,
+            both exactly representable in <code>float</code>) that genuinely diverge under <code>fr-FR</code> if
+            culture leaked.</li>
+        <li><strong>Equality.</strong> Unlike M6/M7 (which override <code>Equals</code>/<code>GetHashCode</code> for
+            their raw arrays), these records hold only value types, <code>string</code>s and nested records, so the
+            compiler-generated record equality is structurally correct (the nested <code>RAWMakerNoteLensInfo</code>/
+            <code>RAWDNGLensInfo</code> compose via their own record <code>Equals</code>). No custom equality — the
+            right call, and consistent with the source's <code>Equatable</code> conformance.</li>
+        <li><strong>Signedness.</strong> <code>FocalType</code> is <code>short</code>→<code>int</code> implicit
+            widening (so <code>-1</code>→<code>Unknown</code>); the EXIF 35&#160;mm focal is <code>ushort</code>→
+            <code>int</code>. The two same-named <code>FocalLengthIn35mmFormat</code> (a <code>float</code> in the
+            maker-note lens, a <code>ushort</code> in the EXIF lens) are kept distinct.</li>
+        <li><strong>Folders.</strong> Only <code>Lens/</code> was created under each project (it has files), matching
+            the M1–M7 convention of folders appearing with their first files.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent; it read the code cold, cross-checked every from-native field
+    mapping against the SwiftRAW originals and the interop structs field-by-field, byte-verified the focal-range
+    separator is <strong>U+2013 (en dash)</strong> in all six files, confirmed the culture-swap tests use
+    exactly-representable fractional focals, and built/ran the suite green in Release — 82 tests). Outcome:
+    <strong>converged — no Critical/High/Medium findings; no M1–M7 regression</strong> (the changes are purely
+    additive; no earlier file is modified and no earlier test is affected).</p>
+    <ul>
+        <li><strong>Focal-range description logic duplicated across the three records</strong> — <em>Low</em> — the
+            <code>min == max ? "{min}mm" : "{min}–{max}mm"</code> idiom appears in all three types, and the
+            "wrap the model in parentheses" logic is identical between <code>RAWMakerNoteLensInfo</code> and
+            <code>RAWLensInfo</code>. <strong>Deferred</strong> — the reviewer notes the Swift originals also inline
+            this per-struct, so keeping it inline is a defensible faithful-port choice; flagged for a decision, left
+            for the user.</li>
+        <li><strong>No test asserts structural equality of the composed <code>RAWLensInfo</code></strong> —
+            <em>Info</em> — record value equality (including that equal <code>MakerNotes</code>/<code>Dng</code>
+            sub-records compare equal) is a public-contract guarantee currently unverified. The Swift suite also
+            omits it, so this is not a regression. <strong>Deferred</strong> — left for the user to weigh in.</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <p>Approved as implemented ("looks good") — no change requests. The two automated-review findings — the
+    duplicated focal-range <code>ToString()</code> logic (<em>Low</em>) and the missing structural-equality test for
+    the composed <code>RAWLensInfo</code> (<em>Info</em>) — were surfaced and accepted as-is (no action). The
+    <code>LensFocalType</code> property-naming decision — renamed from the source's <code>focalType</code> to avoid
+    the <code>CS0102</code> collision with the nested <code>FocalType</code> enum — was surfaced and accepted.</p>
 </div>
 
 <div class="milestone" id="m9">
