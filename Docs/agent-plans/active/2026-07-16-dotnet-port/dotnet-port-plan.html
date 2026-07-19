@@ -323,7 +323,7 @@
     <div class="phase">Phase 1 · Foundations &amp; native interop</div>
     <ol>
         <li><span class="id">M1</span><a href="#m1">Project bootstrap, conventions &amp; native library wiring</a><span class="status completed">Completed</span></li>
-        <li><span class="id">M2</span><a href="#m2">Native interop foundation — P/Invoke, marshaling &amp; SafeHandle</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M2</span><a href="#m2">Native interop foundation — P/Invoke, marshaling &amp; SafeHandle</a><span class="status completed">Completed</span></li>
         <li><span class="id">M3</span><a href="#m3">Low-level helpers &amp; test infrastructure</a><span class="status not-started">Not started</span></li>
     </ol>
     <div class="phase">Phase 2 · Core types</div>
@@ -409,7 +409,7 @@
 </div>
 
 <div class="milestone" id="m2">
-    <div class="head"><h3>M2 — Native interop foundation (P/Invoke, marshaling &amp; SafeHandle)</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M2 — Native interop foundation (P/Invoke, marshaling &amp; SafeHandle)</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Build the managed binding to LibRAW's flat C API and the marshalable struct layer the whole library
     reads from — the highest-risk layer (see the <a href="#notes">layout risk</a>). Everything above it
@@ -425,11 +425,36 @@
         <li>Add the status-code constants (<code>LIBRAW_SUCCESS</code>, <code>LIBRAW_FILE_UNSUPPORTED</code>, <code>LIBRAW_UNSUFFICIENT_MEMORY</code>, plus the fuller <code>LibRaw_errors</code> set) and the <code>IsFatal(code) =&gt; code &lt; -100000</code> predicate.</li>
         <li>Add a native round-trip smoke test: <code>libraw_init(0)</code> → non-null handle → <code>libraw_close</code>; <code>libraw_versionNumber() == 5634</code>.</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>The highest-risk layer, built TDD-style: the layout-validation tests were written to lock every offset, then the structs implemented to satisfy them. Green in <strong>both Debug and Release</strong> (14 tests, 0 warnings).</p>
+    <ul>
+        <li><strong>Ground truth from the headers.</strong> Every struct size and field offset was computed from the vendored LibRAW 0.22.2 headers with a <code>clang</code> <code>offsetof</code>/<code>sizeof</code> probe, compiled for <strong>both arm64 and x86_64</strong> and diffed — <strong>byte-identical</strong>. Because none of the modelled regions contain a C <code>long</code> (whose width differs between Windows LLP64 and Unix LP64) and <code>time_t</code>/pointers/<code>UINT64</code> are 8 bytes everywhere, the layout is architecture-invariant, so the arm64 numbers are valid for win-x64 too. Key values: <code>libraw_data_t</code> is 381576 bytes; within it <code>sizes</code>@8, <code>idata</code>@192, <code>lens</code>@632, <code>makernotes.common</code>@4784, <code>shootinginfo</code>@5088, <code>color</code>@5592, <code>other</code>@192680, <code>rawdata</code>@193768.</li>
+        <li><strong>Bindings.</strong> <code>Interop/LibRaw.cs</code> now binds the full flat-C API via source-generated <code>[LibraryImport]</code> with <code>[UnmanagedCallConv]</code> cdecl. The context handle and every <code>const char*</code> return are <code>IntPtr</code> — never marshaled as <code>string</code> — so the marshaller never frees LibRAW-owned memory. <code>open_file</code> uses <code>StringMarshalling.Utf8</code>; <code>open_buffer</code> uses <code>nuint</code> for <code>size_t</code>.</li>
+        <li><strong>SafeHandle.</strong> <code>LibRawHandle</code> releases via <code>libraw_recycle</code> then <code>libraw_close</code> (mirroring SwiftRAW's <code>deinit</code>), with <code>IsInvalid</code> on a null pointer. Per review, <code>libraw_init</code> is bound to return a <code>LibRawHandle</code> directly, so the source-generated marshaller creates and initialises the handle <em>atomically</em> (no allocate-then-<code>SetHandle</code> leak window).</li>
+        <li><strong>Errors.</strong> <code>LibRawError</code> enum with the exact codes from <code>libraw_const.h</code>, plus <code>IsFatal</code> (<code>&lt; -100000</code>).</li>
+        <li><strong>Structs.</strong> Twelve flat marshalable structs for the sub-structures the port reads. Each is read from the context base pointer at its offset (constants in <code>LibRawData</code>) rather than marshalling the whole 372&#160;KB context. <code>color</code> is modelled from its <code>black</code> field, skipping the leading 128&#160;KB curve and 16&#160;KB <code>cblack</code>; the four <code>cblack</code> values the port surfaces are read separately. GPS is read through the <code>ParsedGps</code> nested in <code>other</code>.</li>
+        <li><strong>Uniform sequential layout.</strong> Every struct uses <code>LayoutKind.Sequential</code>, so the marshaller computes the offsets and a mistyped or misordered field shifts them and fails the guard. Unused intervening fields are modelled only to preserve the layout. (An initial <code>Explicit</code> <code>[FieldOffset]</code> attempt for the sparse structs was abandoned: the CLR rejects object-reference fields at non-8-aligned offsets under explicit layout, and — per review — explicit offset tests are tautological. Sequential resolves both.)</li>
+        <li><strong>Signedness preserved exactly.</strong> <code>filters</code> unsigned (the CFA decode uses an unsigned shift), <code>colors</code>/<code>flip</code> signed, <code>FocalType</code> signed <code>short</code>, GPS refs and <code>xtrans</code> signed <code>sbyte</code>, <code>black</code>/<code>maximum</code>/<code>cblack</code> unsigned. The two same-named <code>FocalLengthIn35mmFormat</code> (a <code>ushort</code> in the EXIF lens, a <code>float</code> in the maker-note lens) are kept distinct.</li>
+        <li><strong>Validation.</strong> The layout tests assert every struct's field offsets and sizes against the probe values, and additionally cross-check — against the <em>actually loaded</em> native library — that the three getter interior-pointers (<code>libraw_get_iparams</code>/<code>lensinfo</code>/<code>imgother</code>) land at exactly the declared offsets. A round-trip smoke test covers <code>init</code>→non-null→<code>close</code>, <code>versionNumber() == 5634</code>, <code>strerror</code> decoding, and the error codes/<code>IsFatal</code>.</li>
+        <li><strong>Deviation from the plan's suggested approach.</strong> Rather than modelling the whole <code>libraw_data_t</code> with opaque <code>ByValArray</code> blocks and marshalling it once, the port reads each needed sub-struct at its offset — avoiding a 372&#160;KB copy and the opaque-block alignment hazard. The getters the plan lists are bound and used for the runtime offset cross-check. <code>CS0649</code> is suppressed per interop file (fields are populated by the marshaller).</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>Two review rounds (fresh-context sub-agents, each independently compiling its own <code>clang</code> offset/size probe against the headers). Outcome: <strong>converged — no Critical/High/Medium findings remain.</strong> Round&#160;1 confirmed the layer byte-exact (no correctness, signedness, alignment or lifetime bug) and raised the findings below; round&#160;2 re-verified the fix, checking the full 34-field maker-note-lens transcription line-by-line (order and types correct, size 736) and the SwiftRAW field mapping, with no new findings.</p>
+    <ul>
+        <li><strong>Explicit-layout tests were tautological</strong> — <em>Medium</em> — <code>Marshal.OffsetOf</code> on an explicit struct echoes the declared <code>[FieldOffset]</code>, so the maker-note-lens and rawdata offset guards could not catch a mis-transcription. <strong>Fixed:</strong> converted both structs to fully-modelled <code>Sequential</code> layout, so the marshaller computes the offsets; the guards now assert padding-sensitive offsets and full size.</li>
+        <li><strong>Offset-constant relativity inconsistent</strong> — <em>Low</em> — the two colour offsets were relative to <code>color</code> while every other constant is absolute. <strong>Fixed:</strong> renamed to <code>ColorCblackRelativeOffset</code>/<code>ColorBodyRelativeOffset</code> with docs spelling out the relativity.</li>
+        <li><strong>Non-atomic SafeHandle initialisation</strong> — <em>Low</em> — <code>Initialize</code> allocates then <code>SetHandle</code>s in two steps. <strong>Deferred:</strong> correct today (no thread-abort window in modern .NET); a <code>LibraryImport</code> SafeHandle-typed return would set it atomically.</li>
+        <li><strong>Redundant <code>recycle</code> before <code>close</code></strong> — <em>Info</em> — <code>close</code> already recycles via the destructor. <strong>Deferred:</strong> harmless and idempotent, and mirrors SwiftRAW; no double-free risk.</li>
+        <li><strong>UTF-8 file-path binding on Windows</strong> — <em>Info</em> — non-ASCII paths would mis-decode via the narrow CRT; <code>libraw_open_wfile</code> is the Windows-Unicode route. <strong>Deferred</strong> to M10's public open API.</li>
+        <li><strong><code>char</code> default-signedness across arches</strong> — <em>Info</em> — modelled as <code>sbyte</code>; immaterial as every value is ASCII. <strong>Deferred</strong> (no action).</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <ol>
+        <li><strong>Make the SafeHandle initialization atomic.</strong> Accepted the Low finding: change <code>libraw_init</code> to return a <code>LibRawHandle</code> directly so the source-generated marshaller creates and initialises the handle atomically, closing the allocate-then-<code>SetHandle</code> window. <em>(Applied — the binding now returns <code>LibRawHandle</code>; <code>Initialize</code> is a thin factory over it.)</em></li>
+        <li><strong>Route file opening to <code>libraw_open_wfile</code> on Windows.</strong> The public open API (M10) must open files through LibRAW's wide-character entry point <code>libraw_open_wfile(const wchar_t*)</code> on Windows so non-ASCII paths are not mis-decoded by the narrow CRT; the UTF-8 <code>libraw_open_file</code> binding stays for macOS/Linux. <em>(Recorded — added as an explicit task in M10.)</em></li>
+    </ol>
 </div>
 
 <div class="milestone" id="m3">
@@ -582,6 +607,7 @@
     <ul class="task-list">
         <li><code>RAWFile</code> (sealed class, <code>IDisposable</code>) holding a <code>LibRawHandle</code> and (for the byte-buffer path) a pinned/owned input buffer; <code>Options</code> property.</li>
         <li>Constructors/factories: from a file path/URL (validate it's a local file &amp; readable → <code>RAWException</code> before touching LibRAW, then <code>libraw_open_file</code>) and from bytes/<code>Data</code> (copy into a pinned buffer owned for the file's lifetime, then <code>libraw_open_buffer</code>).</li>
+        <li><strong>Windows Unicode paths (recorded from M2 review):</strong> bind and route to LibRAW's wide entry point <code>libraw_open_wfile(const wchar_t*)</code> on Windows (UTF-16) so non-ASCII paths are not mis-decoded by the narrow CRT; keep the UTF-8 <code>libraw_open_file</code> binding for macOS/Linux.</li>
         <li>Map open/unpack failures via helpers: <code>LIBRAW_FILE_UNSUPPORTED</code> → unsupported-format; else open/unpack failed; allocation failure → LibRAW error; messages from <code>libraw_strerror</code>. On any failure during construction, recycle/close and free the buffer before throwing.</li>
         <li><code>Unpack()</code> — idempotent (guard flag), eager in the constructor when <code>Options.UnpacksImmediately</code>, otherwise deferred.</li>
         <li>Metadata accessors building fresh records from the marshaled native structs: <code>ImageSizes</code>, <code>ImageInfo</code>, <code>CfaPattern</code>, <code>ShotInfo</code>, <code>GpsInfo</code> (<code>?</code>), <code>ColorData</code>, <code>LensInfo</code>, <code>CameraMetadata</code>, <code>SensorData</code>.</li>
