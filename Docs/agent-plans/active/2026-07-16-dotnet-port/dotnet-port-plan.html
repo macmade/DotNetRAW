@@ -334,7 +334,7 @@
     <ol>
         <li><span class="id">M5</span><a href="#m5">Image geometry &amp; identity</a><span class="status completed">Completed</span></li>
         <li><span class="id">M6</span><a href="#m6">CFA pattern &amp; sensor data</a><span class="status completed">Completed</span></li>
-        <li><span class="id">M7</span><a href="#m7">Colour data</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M7</span><a href="#m7">Colour data</a><span class="status completed">Completed</span></li>
         <li><span class="id">M8</span><a href="#m8">Lens info</a><span class="status not-started">Not started</span></li>
         <li><span class="id">M9</span><a href="#m9">Shot, GPS &amp; camera metadata</a><span class="status not-started">Not started</span></li>
     </ol>
@@ -790,7 +790,7 @@
 </div>
 
 <div class="milestone" id="m7">
-    <div class="head"><h3>M7 — Colour data</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M7 — Colour data</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Port the colour-calibration record, exercising the trickiest field reads in the marshaled
     <code>color</code> struct (large arrays, matrices, the <code>cblack</code> accessor, ICC-profile presence).</p>
@@ -800,11 +800,63 @@
         <li>Read the four <code>cblack</code> values directly (the port's equivalent of the Swift shim's <code>cblack</code> accessor) and reshape matrices via <code>CFixedArray.Matrix</code>.</li>
         <li>Tests: array/matrix shapes (4,4,4 / 3×4 / 4×3 / 3×4) and <code>maximum &gt; 0</code>, fixture-driven; custom-equality unit test.</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Built TDD-style (tests first, watched fail, then implemented to green). The record lives in
+    <code>DotNetRAW/Color/</code>; tests under <code>DotNetRAWTests/Color/</code>. Green in <strong>both Debug and
+    Release</strong>: 69 tests (5 new), 0 warnings.</p>
+    <ul>
+        <li><strong><code>RAWColorData</code></strong> (sealed record) — <code>BlackLevel</code>,
+            <code>ChannelBlackLevels</code>, <code>Maximum</code>, <code>DataMaximum</code>,
+            <code>CameraMultipliers</code>/<code>PreMultipliers</code> (flat <code>float[]</code>),
+            <code>RgbCamera</code> (3×4), <code>CameraXyz</code> (4×3), <code>ColorMatrix</code> (3×4),
+            <code>HasEmbeddedColorProfile</code>, <code>ColorProfileLength</code>. Public memberwise constructor +
+            internal from-native constructor. <code>ToString()</code> → <code>"black N, max N"</code> with
+            <code>", ICC profile"</code> appended when embedded (via
+            <code>string.Create( CultureInfo.InvariantCulture, … )</code>).</li>
+        <li><strong>From-native reads &amp; reshapes.</strong> Scalars <code>uint</code>→<code>int</code>; the four
+            <code>cblack</code> values are read separately (the interop <code>color</code> struct starts after the
+            128&#160;KB curve and 16&#160;KB <code>cblack</code>, at
+            <code>LibRawData.ColorBodyRelativeOffset</code>) and passed in as a <code>uint[]</code>, converted to
+            <code>int</code>; matrices reshaped via <code>CFixedArray.Matrix</code> with the exact orientation
+            (<code>rgb_cam</code> 3×4, <code>cam_xyz</code> 4×3, <code>cmatrix</code> 3×4 — cross-checked against
+            the vendored header); <code>HasEmbeddedColorProfile = profile != IntPtr.Zero &amp;&amp; profile_length &gt; 0</code>.</li>
+        <li><strong>Custom structural equality</strong> (as in M6): <code>Equals(RAWColorData?)</code> deep-compares
+            the three flat arrays (<code>SequenceEqual</code>) and three matrices (a private
+            <code>MatricesEqual</code>) plus all scalars; <code>GetHashCode()</code> folds the same members and is
+            consistent with <code>Equals</code> (verified for the float NaN/±0 edge cases). Self-contained per-record
+            helpers, matching the M6 pattern.</li>
+        <li><strong>Test scope.</strong> Description (with/without profile + the mandated <code>fr-FR</code> guard),
+            the full from-native mapping and matrix orientation (built from a marshaled struct directly), the ICC
+            two-part flag, and a custom-equality test covering every structural member. The fixture-driven
+            shape/<code>maximum&gt;0</code> checks depend on <code>RAWFile</code> (M10) and are covered in M11.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent; built Debug <em>and</em> Release, ran all 69 tests green in both,
+    cross-checked the matrix orientation against the vendored LibRAW header, and verified the equality/hash
+    consistency including float edge cases). Outcome: <strong>converged — no Critical/High/Medium findings; no
+    M1–M6 regression.</strong> All findings were Info-level.</p>
+    <ul>
+        <li><strong>Equality test exercised only two structural members</strong> — <em>Info</em> — a "forgot a
+            member in a custom <code>Equals</code>" bug would not be caught for the other six.
+            <strong>Fixed:</strong> strengthened the equality test with a copy-with-override helper covering a
+            scalar plus both matrix and flat-array members.</li>
+        <li><strong>Checked <code>uint</code>→<code>int</code> casts</strong> — <em>Info</em> — a value ≥ 2³¹ would
+            throw where the source's 64-bit <code>Int</code> would not; unreachable for these physically-bounded
+            fields (black/saturation levels, ICC length), consistent with the M5 precedent.
+            <strong>Deferred</strong> (no action).</li>
+        <li><strong><code>MatricesEqual</code> duplicates M6's <code>GridsEqual</code> pattern</strong> —
+            <em>Info</em> — near-identical (float[][] vs int[][]); the review recommends keeping self-contained
+            per-record helpers (the M6-established pattern) and only de-duplicating both together as a separate
+            decision. <strong>Deferred</strong> (no action).</li>
+        <li><strong>Null-<code>cblack</code> → empty path moves to the caller</strong> — <em>Info</em> — the source
+            yields <code>[]</code> for a null <code>cblack</code>; since the interop reads <code>cblack</code>
+            separately, that empty case is M10's responsibility. <strong>Deferred with a forward note for M10.</strong></li>
+    </ul>
+    <div class="field">Review comments</div>
+    <p>Approved as implemented — no change requests. The Info-level automated-review findings were surfaced and
+    accepted as-is (the equality-test one was fixed during the review loop).</p>
 </div>
 
 <div class="milestone" id="m8">
