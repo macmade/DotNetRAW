@@ -10,8 +10,38 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <PackageId>DotNetRAW</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Jean-David Gadina</Authors>
+    <Company>XS-Labs</Company>
+    <Description>Read-only camera RAW metadata library for C# / .NET. Opens RAW files through the native LibRAW library and exposes image geometry, colour calibration, lens identity and shooting metadata, plus the raw 16-bit Bayer sensor buffer. It does not demosaic, decode thumbnails, or write.</Description>
+    <PackageTags>raw;libraw;photography;camera;image;io</PackageTags>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/macmade/DotNetRAW</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/macmade/DotNetRAW</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <Copyright>© 2026 Jean-David Gadina - www.xs-labs.com</Copyright>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
   <ItemGroup>
     <InternalsVisibleTo Include="DotNetRAWTests" />
+  </ItemGroup>
+
+  <!-- NuGet packaging: ship the README, the bundled native's own licence, and the
+       per-RID native LibRAW binaries. Packed unconditionally for every supported
+       RID (win-x64 and the universal macOS dylib under the generic osx RID), so
+       NuGet's RID-based native-asset resolution copies the right one into the
+       consumer's output. This is independent of the host-RID build-time copy above,
+       which only serves local build and test. -->
+  <ItemGroup>
+    <None Include="..\README.md" Pack="true" PackagePath="\" />
+    <None Include="..\LibRAW\LICENSE" Pack="true" PackagePath="LibRAW\" />
+    <None Include="..\runtimes\win-x64\native\libraw.dll" Pack="true" PackagePath="runtimes\win-x64\native\" />
+    <None Include="..\runtimes\osx\native\libraw.dylib" Pack="true" PackagePath="runtimes\osx\native\" />
   </ItemGroup>
 
   <!-- Native LibRAW binary packaging.

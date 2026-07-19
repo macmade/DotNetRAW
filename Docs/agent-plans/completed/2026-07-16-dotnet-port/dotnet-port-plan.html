@@ -346,7 +346,7 @@
     <ol>
         <li><span class="id">M11</span><a href="#m11">Integration tests &amp; sample-file parity</a><span class="status completed">Completed</span></li>
         <li><span class="id">M12</span><a href="#m12">Finalization — clean build, README, CI parity</a><span class="status completed">Completed</span></li>
-        <li><span class="id">M13</span><a href="#m13">NuGet package — bundle native binaries for all supported RIDs</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M13</span><a href="#m13">NuGet package — bundle native binaries for all supported RIDs</a><span class="status completed">Completed</span></li>
     </ol>
 </div>
 
@@ -1368,7 +1368,7 @@
 </div>
 
 <div class="milestone" id="m13">
-    <div class="head"><h3>M13 — NuGet package: bundle native binaries for all supported RIDs</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M13 — NuGet package: bundle native binaries for all supported RIDs</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Produce a distributable NuGet package — <strong>built from macOS via a <code>Makefile</code>, mirroring
     DotNetFITS's packaging</strong> — that embeds the native LibRAW binary for every supported runtime
@@ -1424,11 +1424,99 @@
         <li>Document the publishing mechanics (NuGet.org API key, an optional CI publish step) without
             automating them unless explicitly requested.</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Produced the distributable NuGet package, built from macOS via a <code>Makefile</code> mirroring
+    DotNetFITS. Green in <strong>both Debug and Release</strong> (126 tests, 0 warnings); the packaging changes do
+    not affect the normal build. <code>make pack</code> produces <code>DotNetRAW.1.0.0.nupkg</code> (plus a
+    <code>.snupkg</code> symbol package) with <strong>no packaging warnings</strong>.</p>
+    <ul>
+        <li><strong>Makefile.</strong> A root <code>Makefile</code> mirroring <code>../DotNetFITS/Makefile</code>:
+            the <code>DOTNET</code> fallback (<code>command -v dotnet || …</code>) and
+            <code>all</code>/<code>build</code>/<code>test</code>/<code>pack</code>/<code>clean</code> targets;
+            <code>pack</code> runs <code>dotnet pack DotNetRAW/DotNetRAW.csproj -c Release -o Build/</code> and
+            <code>clean</code> removes the <code>*.nupkg</code>/<code>*.snupkg</code>. Output lives under
+            <code>Build/</code>, git-ignored via a <code>Build/.gitignore</code> (<code>*</code> +
+            <code>!.gitignore</code>), matching the repo's <code>bin</code>/<code>obj</code> convention. The header
+            comment additionally documents the bundled natives (the LibRAW-specific difference from the
+            pure-managed DotNetFITS).</li>
+        <li><strong>Package metadata.</strong> Added to <code>DotNetRAW.csproj</code> (preserving its UTF-8+BOM /
+            CRLF encoding): <code>PackageId</code>, <code>Version 1.0.0</code>, <code>Authors</code>,
+            <code>Company</code>, a read-only-scope <code>Description</code>, <code>PackageTags</code>
+            (<code>raw;libraw;photography;camera;image;io</code>), <code>PackageLicenseExpression=MIT</code>,
+            <code>PackageProjectUrl</code>/<code>RepositoryUrl</code>/<code>RepositoryType=git</code>,
+            <code>PackageReadmeFile=README.md</code>, <code>Copyright</code>, and
+            <code>IncludeSymbols</code> + <code>SymbolPackageFormat=snupkg</code>.</li>
+        <li><strong>Bundled natives.</strong> Pack items include, unconditionally,
+            <code>runtimes/win-x64/native/libraw.dll</code> and <code>runtimes/osx/native/libraw.dylib</code> (the
+            universal dylib, serving both <code>osx-arm64</code> and <code>osx-x64</code> through the RID fallback
+            graph), plus the README and the LibRAW licence. These pack-only <code>&lt;None&gt;</code> items coexist
+            with M1's host-RID build-time copy items (which carry no <code>Pack</code>) — verified no
+            double-include and no <code>NU5100</code>/<code>NU5118</code>. Package layout:
+            <code>lib/net10.0/</code>, <code>runtimes/&lt;rid&gt;/native/</code>, <code>README.md</code>,
+            <code>LibRAW/LICENSE</code>.</li>
+        <li><strong>RID set.</strong> Ships <code>win-x64</code> + the universal <code>osx</code> dylib — the two
+            binaries that exist and report <code>0.22.2-Release</code> / <code>5634</code>.
+            <code>win-arm64</code>/<code>linux-x64</code> are deliberately omitted: each would need its own compiled
+            LibRAW, unavailable here (future work). Nothing over-claims broader support.</li>
+        <li><strong>Native licensing.</strong> <code>PackageLicenseExpression=MIT</code> covers the C# code
+            (rendered by NuGet from the SPDX expression, no bundled file needed). The bundled LibRAW native has its
+            own terms, so LibRAW's licence is packed as a file (<code>LibRAW/LICENSE</code>, copied verbatim from
+            the vendored LibRAW source) so it travels with the binary — the standard practice when redistributing a
+            third-party native.</li>
+        <li><strong>End-to-end verified.</strong> A throwaway console app referencing <code>DotNetRAW 1.0.0</code>
+            from a local <code>Build/</code> feed opened the real CR3 on this osx-arm64 host: the native resolved
+            automatically (<code>runtimes/osx/native/libraw.dylib</code> via the <code>osx</code> RID fallback, no
+            custom consumer <code>.targets</code>) and the metadata read correctly (<code>0.22.2-Release</code>,
+            Canon EOS R7, raw 7128×4732).</li>
+        <li><strong>Publishing (documented, not automated).</strong> Build with <code>make pack</code>, then
+            <code>dotnet nuget push Build/DotNetRAW.1.0.0.nupkg --api-key &lt;key&gt; --source
+            https://api.nuget.org/v3/index.json</code> (the <code>.snupkg</code> is pushed alongside). A CI publish
+            step could wrap this but is intentionally left out.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent). It independently built and ran the suite in Debug <em>and</em>
+    Release (<strong>126 / 126 green, 0 warnings</strong>), ran <code>make pack</code> — including a forced clean
+    rebuild — with <strong>no packaging warnings or errors</strong>, inspected the <code>.nupkg</code> layout and
+    nuspec, and reproduced the end-to-end consume (a throwaway project resolving the native and reading the CR3).
+    It confirmed the csproj encoding was preserved (UTF-8+BOM, CRLF), the metadata mirrors DotNetFITS with
+    DotNetRAW values, the pack and host-copy item groups coexist (single native per RID, DLL only in
+    <code>lib/</code>), the Makefile is tab-indented and mirrors the sibling, and the RID-set decision is coherent
+    and does not over-claim. Outcome: <strong>converged — no Critical/High/Medium findings; no regression.</strong></p>
+    <ul>
+        <li><strong>Bundled LibRAW licence is CDDL-only</strong> — <em>Low</em> — the vendored
+            <code>LibRAW/LICENSE</code> is a verbatim copy of LibRAW's <strong>CDDL-1.0</strong> text; it omits the
+            <strong>LGPL-2.1</strong> half of LibRAW's either/or dual licence and a NOTICE pointing to where
+            LibRAW's source can be obtained. Shipping the native under the CDDL option alone, with the CDDL text
+            included, is a legally valid choice for an either/or dual licence, so this is not a blocker.
+            <strong>Surfaced to the maintainer and accepted as-is</strong> (see Review comments).</li>
+        <li><strong>Unshipped-RID consumers get a runtime error, not a build-time warning</strong> — <em>Info</em>
+            — a consumer on an unshipped RID (e.g. <code>linux-x64</code>) gets a <code>DllNotFoundException</code>
+            at run time; the <code>_WarnMissingLibRawNative</code> warning only fires when building DotNetRAW from
+            source, not when consuming the package. Consistent with the stated scope. <strong>Deferred</strong>
+            (no action).</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <ol>
+        <li><strong>Concern: two <code>.gitignore</code> files were removed.</strong> Flagged that
+            <code>DotNetRAW/bin/.gitignore</code> and <code>DotNetRAW/obj/.gitignore</code> had disappeared. Cause:
+            the automated review's fresh-context sub-agent ran <code>rm -rf DotNetRAW/obj DotNetRAW/bin</code> for a
+            forced-clean pack test, deleting those two tracked ignore files; the subsequent <code>dotnet pack</code>
+            recreated the folders with build output but not the committed files. <strong>Resolved:</strong> both
+            restored from <code>HEAD</code> (never staged for deletion, so nothing was lost); all four
+            <code>bin</code>/<code>obj</code> <code>.gitignore</code> files are intact and the committed change set
+            is unaffected. Future review agents will be scoped to avoid destructive cleanup.</li>
+        <li><strong>Question: why ship LibRAW's licence but not ours?</strong> Answered in discussion — no code
+            change. DotNetRAW's own MIT licence <em>is</em> declared, via the
+            <code>PackageLicenseExpression=MIT</code> SPDX expression (rendered by NuGet, no bundled file needed);
+            LibRAW's licence is packed as a <em>file</em> because it is a redistributed third-party native whose
+            terms can't ride on our package's SPDX expression — the standard practice when bundling a third-party
+            binary (a pure-managed package like DotNetFITS ships no licence file at all). The CDDL-only bundling was
+            surfaced and accepted as-is.</li>
+        <li><strong>Approved</strong> ("looks good") — no change requests; the licensing setup is kept as
+            implemented.</li>
+    </ol>
 </div>
 
 <h2 id="appendix">Appendix</h2>
