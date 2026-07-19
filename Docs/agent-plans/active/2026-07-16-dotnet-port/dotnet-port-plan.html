@@ -324,7 +324,7 @@
     <ol>
         <li><span class="id">M1</span><a href="#m1">Project bootstrap, conventions &amp; native library wiring</a><span class="status completed">Completed</span></li>
         <li><span class="id">M2</span><a href="#m2">Native interop foundation — P/Invoke, marshaling &amp; SafeHandle</a><span class="status completed">Completed</span></li>
-        <li><span class="id">M3</span><a href="#m3">Low-level helpers &amp; test infrastructure</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M3</span><a href="#m3">Low-level helpers &amp; test infrastructure</a><span class="status completed">Completed</span></li>
     </ol>
     <div class="phase">Phase 2 · Core types</div>
     <ol>
@@ -458,7 +458,7 @@
 </div>
 
 <div class="milestone" id="m3">
-    <div class="head"><h3>M3 — Low-level helpers &amp; test infrastructure</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M3 — Low-level helpers &amp; test infrastructure</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Port the reusable helpers every value type depends on, and stand up the test infrastructure
     (fixtures, discovery, shared utilities) — all deterministic and cross-platform.</p>
@@ -471,11 +471,79 @@
         <li>Implement fixture discovery in <code>TestUtilities</code>: <code>[CallerFilePath]</code> → walk to repo root → <code>Test Files/</code>, filter the 24 RAW extensions, sorted <code>StringComparer.Ordinal</code>; expose <code>RawFileUrls</code> / <code>HasTestFiles</code>.</li>
         <li>Add unit tests for the helpers (fixed-array order, matrix reshape 2×3 and 3×4, UTF-8-to-NUL, compact float incl. culture-swap).</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Built TDD-style: the helper tests were written first and watched fail to compile, then the
+    helpers were implemented to green. The three helpers live in <code>DotNetRAW/Extensions/</code> and the
+    test infrastructure in <code>DotNetRAWTests/</code> (with <code>Extensions/</code> mirrored under the test
+    project; <code>TestError</code>/<code>TestUtilities</code> at the test-project root). Green in
+    <strong>both Debug and Release</strong>: 28 tests (14 new), 0 warnings.</p>
+    <ul>
+        <li><strong><code>CFixedArray</code></strong> (internal static). <code>Values&lt; T &gt;</code> copies a
+            flat fixed-size C-array field into an independent array; <code>Matrix&lt; T &gt;</code> reshapes a
+            flat row-major field into <code>T[][]</code> via <code>flat[(row*columns)+column]</code>. Key
+            deviation from the source: the M2 interop already marshals fixed C arrays as <em>flat managed
+            arrays</em> (e.g. <code>float[] RgbCamera</code>), so these operate on already-flat arrays rather
+            than reinterpreting an imported tuple. Both accept <code>IReadOnlyList&lt; T &gt;</code> so the
+            interop <code>T[]</code> fields bind directly; <code>Values</code> returns an owned copy
+            (test-proven independent of the source).</li>
+        <li><strong><code>ByteArrayExtensions.DecodeCString</code></strong> (internal extension on
+            <code>byte[]</code>). Decodes a fixed C <code>char</code> buffer as UTF-8 up to the first NUL
+            (<code>Array.IndexOf</code>; no NUL → whole buffer; leading NUL/empty → <code>""</code>).
+            <code>byte[]</code> is the marshaled type (matches <code>LibRawIParams.Make</code> etc.), and the
+            lenient UTF-8 replacement-fallback mirrors the original's leniency.</li>
+        <li><strong><code>FloatingPointExtensions.CompactDescription&lt; T &gt;</code></strong> (internal,
+            generic over <code>IBinaryFloatingPointIeee754&lt; T &gt;</code> — the idiomatic .NET analog of the
+            source's floating-point extension, covering both <code>float</code> and <code>double</code> without
+            duplication). Whole finite values with <code>|v| &lt; 1e9</code> render as an integer
+            (<code>long.CreateTruncating</code>), otherwise the shortest round-trippable form; always
+            <code>CultureInfo.InvariantCulture</code>. <code>T.IsInteger</code> stands in for the source's
+            <code>== rounded()</code> (equivalent for finite values); the <code>1e9</code> limit is exactly
+            representable in both <code>float</code> and <code>double</code>, so the boundary matches. Covered
+            by an explicit <code>fr-FR</code> culture-swap test.</li>
+        <li><strong><code>TestError</code></strong> — test-only <code>internal sealed</code> exception, private
+            constructor + <code>Failure</code> factory, message prefixed <code>"Test Error: "</code>. Defined
+            for later milestones; unused today (no warning under <code>TreatWarningsAsErrors</code> via
+            <code>InternalsVisibleTo</code>).</li>
+        <li><strong><code>TestUtilities</code></strong> (<code>public static</code>) — fixture discovery via
+            <code>[CallerFilePath]</code> → repo root → <code>Test Files/</code>, filtering the 24 RAW
+            extensions (case-insensitive <code>HashSet</code>), sorted <code>StringComparer.Ordinal</code> by
+            full path; exposes <code>RawFileUrls</code> (absolute paths) and <code>HasTestFiles</code>. No
+            <code>[ Fact ]</code> self-test here (fixture-discovery consistency is deferred to M11), so the type
+            is <code>static</code>.</li>
+        <li><strong>Folders.</strong> Only <code>Extensions/</code> was created under each project (it has
+            files); the other library subfolders will appear with their first files, matching the M1/M2
+            convention.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent; it built the library and tests in Debug <em>and</em> Release,
+    ran all 28 tests green in both, and empirically probed the generic-math path — including the
+    <code>Half</code> / <code>T.CreateChecked(1e9)</code> saturation behaviour — and the .NET fallback
+    formatting). Outcome: <strong>converged — no Critical/High/Medium findings; no M1/M2 regression.</strong>
+    The reviewer independently confirmed the row-major reshape, the NUL/UTF-8 edge cases, the invariant
+    culture-safety, the fixed signedness/marshaling assumptions, and full doc-comment/style compliance.</p>
+    <ul>
+        <li><strong>Doc comment referenced the Swift original</strong> — <em>Low</em> — the
+            <code>TestUtilities.RawFileUrls</code> doc named the source library, the codebase's only such
+            reference, violating the "describe on its own terms" convention. <strong>Fixed:</strong> reworded to
+            drop the reference and clarify the values are absolute filesystem paths, not URIs (also addresses
+            the naming note below).</li>
+        <li><strong>Compact-description fallback text diverges for non-finite / ≥&#160;1e9 values</strong> —
+            <em>Info</em> — e.g. <code>NaN</code>/<code>Infinity</code> vs <code>nan</code>/<code>inf</code>, and
+            <code>1e9</code> → <code>1000000000</code> vs <code>1000000000.0</code>. Deliberate and
+            plan-sanctioned; unreachable for realistic RAW metadata (aperture/focal/ISO/EV are small finite
+            values). <strong>Deferred</strong> (no action).</li>
+        <li><strong>Fixture sort key differs from the DotNetFITS sibling</strong> — <em>Info</em> — sorts by full
+            path vs the sibling's file name; both satisfy the <code>StringComparer.Ordinal</code> requirement,
+            and full-path ordering is closer to the source's <code>absoluteString</code> sort.
+            <strong>Deferred</strong> (no action).</li>
+        <li><strong><code>RawFileUrls</code> returns paths, not URLs</strong> — <em>Info</em> — a carried-over
+            name; folded into the Low fix's doc clarification. <strong>Deferred</strong> (no action).</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <p>Approved as implemented — no change requests. The three Info-level automated-review findings were
+    surfaced and accepted as-is (no action).</p>
 </div>
 
 <div class="phase-banner">Phase 2 · Core types</div>
