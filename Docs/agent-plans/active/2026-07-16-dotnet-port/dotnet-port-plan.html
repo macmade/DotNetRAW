@@ -345,7 +345,7 @@
     <div class="phase">Phase 5 · Integration &amp; finalization</div>
     <ol>
         <li><span class="id">M11</span><a href="#m11">Integration tests &amp; sample-file parity</a><span class="status completed">Completed</span></li>
-        <li><span class="id">M12</span><a href="#m12">Finalization — clean build, README, CI parity</a><span class="status not-started">Not started</span></li>
+        <li><span class="id">M12</span><a href="#m12">Finalization — clean build, README, CI parity</a><span class="status completed">Completed</span></li>
         <li><span class="id">M13</span><a href="#m13">NuGet package — bundle native binaries for all supported RIDs</a><span class="status not-started">Not started</span></li>
     </ol>
 </div>
@@ -1287,7 +1287,7 @@
 </div>
 
 <div class="milestone" id="m12">
-    <div class="head"><h3>M12 — Finalization: clean build, README, CI parity</h3><span class="status not-started">Not started</span></div>
+    <div class="head"><h3>M12 — Finalization: clean build, README, CI parity</h3><span class="status completed">Completed</span></div>
     <div class="field">Goal</div>
     <p>Bring the port to a shippable state: a clean warning-free build in both configurations on both
     platforms, an updated README on the maintainer's template, and CI parity.</p>
@@ -1300,11 +1300,71 @@
         <li>Confirm <code>ci-win.yaml</code> passes with the native DLL in place; note the macOS native path is exercised locally.</li>
         <li>Move this plan from <code>Docs/agent-plans/active/</code> to <code>Docs/agent-plans/completed/</code> once done (per the maintainer's workflow).</li>
     </ul>
-    <div class="field">Status</div><p><span class="status not-started">Not started</span></p>
-    <div class="field">Completed</div><p class="placeholder">—</p>
-    <div class="field">Implementation notes</div><p class="placeholder">To be filled in during implementation.</p>
-    <div class="field">Automated review</div><p class="placeholder">To be filled in by the automated review loop.</p>
-    <div class="field">Review comments</div><p class="placeholder">Awaiting human review.</p>
+    <div class="field">Status</div><p><span class="status completed">Completed</span></p>
+    <div class="field">Completed</div><p>2026-07-19</p>
+    <div class="field">Implementation notes</div>
+    <p>Finalization pass — the port is now shippable. Green in <strong>both Debug and Release</strong>
+    (<strong>126 tests</strong>, 0 warnings under <code>TreatWarningsAsErrors</code>), with no production-code
+    change: the only tracked edit is the README.</p>
+    <ul>
+        <li><strong>Swift-reference sweep — clean.</strong> A repository-wide search
+            (<code>git grep -niE 'swift|foundation'</code> plus a <code>.cs</code>-only sweep for Swift idioms
+            such as <code>deinit</code>/<code>Equatable</code>/<code>rawValue</code>/<code>#expect</code>) found
+            <strong>no</strong> references to the Swift original, Foundation, or Swift idioms in any shipped
+            source, doc-comment, test, or the README. The library already describes itself entirely on its own
+            terms (the one such leak was fixed back in M3).</li>
+        <li><strong>README.</strong> Replaced the stub with a full README on the maintainer's standard template
+            (mirroring DotNetFITS): title + badges, About, Status, Scope &amp; Limitations, Requirements,
+            Building, Example Usage (reading metadata + accessing the raw sensor buffer), License, Repository
+            Infos. It states the read-only scope (no demosaic/thumbnail/write), the native
+            <strong>LibRAW 0.22.2</strong> dependency and the bundled RIDs (<code>win-x64</code> + a universal
+            macOS dylib covering <code>osx-arm64</code>/<code>osx-x64</code>), and notes that the bundled native
+            carries its own licence (LGPL-2.1 / CDDL-1.0), distinct from the library's MIT. The badge and
+            repository URLs already targeted DotNetRAW.</li>
+        <li><strong>README examples compile-verified.</strong> Both C# snippets were built verbatim against the
+            built library in a throwaway console project (<code>Nullable=enable</code>,
+            <code>TreatWarningsAsErrors=true</code>) — 0 warnings, 0 errors — so every API name, signature,
+            nullability pattern (<code>file.RawImage is ushort[] samples</code>,
+            <code>file.GpsInfo is RAWGPSInfo gps</code>) and the value-type <code>WithRawImage</code> return
+            type-check.</li>
+        <li><strong>CI parity — no change needed.</strong> <code>ci-win.yaml</code> builds and tests Debug and
+            Release on Windows via <code>dotnet test</code> (no <code>--nologo</code>). The library csproj's
+            native-copy wiring resolves the host RID to <code>win-x64</code> on the runner and copies
+            <code>libraw.dll</code> flat next to the test binary (transitively from the library), so the suite
+            runs against the real native there; the macOS native path is exercised locally on every run. A
+            build-time warning fires if a host RID has no bundled native.</li>
+        <li><strong>Plan archiving deferred.</strong> This milestone's original "move the plan to
+            <code>completed</code>" task predates <strong>M13</strong> (the NuGet milestone, added later at the
+            maintainer's request), so the plan is <em>not</em> moved here — archiving belongs after the final
+            milestone (M13).</li>
+        <li><strong>NuGet metadata untouched.</strong> The library csproj carries no packaging metadata yet; that
+            is M13's scope.</li>
+    </ul>
+    <div class="field">Automated review</div>
+    <p>One review round (fresh-context sub-agent). It independently built and ran the suite in Debug <em>and</em>
+    Release (<strong>126 / 126 green, 0 warnings</strong>), compiled both README snippets verbatim against the
+    built library in its own throwaway project (0 warnings), and cross-checked every README claim against the
+    real code: the public API surface, the disposal/<code>ObjectDisposedException</code> contract, the
+    culture-invariant descriptions, the LibRAW <strong>0.22.2</strong> version (from the vendored header), the
+    bundled RIDs (with <code>lipo</code> confirming the fat dylib), the "resolved by import name" P/Invoke
+    wording, the CI native-copy wiring, and the LibRAW licence note; it also confirmed the no-Swift-references
+    sweep and the DotNetRAW-correct badge/repo URLs. Outcome: <strong>converged — no Critical/High/Medium
+    findings; no regression.</strong></p>
+    <ul>
+        <li><strong><code>RawImage</code> null cause stated narrowly</strong> — <em>Info</em> — the Scope bullet
+            listed only the non-Bayer cause, but the accessor also returns <code>null</code> before the data is
+            unpacked (reachable only in the non-default lazy path). <strong>Fixed:</strong> the parenthetical now
+            also names the not-yet-unpacked case, matching the accessor's own doc.</li>
+        <li><strong>"immutable values" loosely covered the raw buffer</strong> — <em>Info</em> — the metadata
+            records are immutable, but <code>RawImage</code> returns a mutable caller-owned copy.
+            <strong>Fixed:</strong> the Status line now reads "the metadata as immutable values and the raw Bayer
+            buffer as a caller-owned copy."</li>
+    </ul>
+    <div class="field">Review comments</div>
+    <p>Approved as implemented ("looks good") — no change requests. The two Info-level automated-review findings —
+    both README accuracy nitpicks (that <code>RawImage</code> is also <code>null</code> before unpacking, and
+    that the raw buffer is a caller-owned copy rather than an immutable value) — were fixed during the review
+    loop and accepted.</p>
 </div>
 
 <div class="milestone" id="m13">
